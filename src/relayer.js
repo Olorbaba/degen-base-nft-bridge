@@ -18,11 +18,14 @@ const address = (value, name) => {
 };
 
 export function readConfig(env = process.env) {
-  const sourceRpcUrl = env.DEGEN_RPC_URL || 'https://rpc.degen.tips';
+  const sourceRpcUrl = env.SOURCE_RPC_URL || env.DEGEN_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
   const destinationRpcUrl = env.BASE_RPC_URL || 'https://sepolia.base.org';
-  const sourceChainId = Number(env.DEGEN_CHAIN_ID || 666666666);
+  const sourceChainId = Number(env.SOURCE_CHAIN_ID || env.DEGEN_CHAIN_ID || 11155111);
   const destinationChainId = Number(env.BASE_CHAIN_ID || 84532);
-  const sourceChain = defineChain({ id: sourceChainId, name: 'Degen Chain', nativeCurrency: { name: 'DEGEN', symbol: 'DEGEN', decimals: 18 }, rpcUrls: { default: { http: [sourceRpcUrl] } } });
+  const sourceIsDegen = sourceChainId === 666666666;
+  const sourceSymbol = env.SOURCE_CURRENCY_SYMBOL || (sourceIsDegen ? 'DEGEN' : 'ETH');
+  const sourceName = env.SOURCE_CHAIN_NAME || (sourceIsDegen ? 'Degen Chain' : sourceChainId === 11155111 ? 'Ethereum Sepolia' : `Source chain ${sourceChainId}`);
+  const sourceChain = defineChain({ id: sourceChainId, name: sourceName, nativeCurrency: { name: sourceSymbol === 'ETH' ? 'Ether' : sourceSymbol, symbol: sourceSymbol, decimals: 18 }, rpcUrls: { default: { http: [sourceRpcUrl] } } });
   const destinationChain = defineChain({ id: destinationChainId, name: destinationChainId === 8453 ? 'Base' : 'Base Sepolia', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [destinationRpcUrl] } } });
   const privateKey = env.RELAYER_PRIVATE_KEY && /^0x[0-9a-fA-F]{64}$/.test(env.RELAYER_PRIVATE_KEY) ? env.RELAYER_PRIVATE_KEY : null;
   const account = privateKey ? privateKeyToAccount(privateKey) : null;
@@ -191,7 +194,7 @@ export function createStatusService(config, relayer) {
       bridgeEnabled: config.relayEnabled,
       safetyReason: config.safetyReason,
       routeMode: config.hybridRoute ? 'controlled-test' : 'production',
-      source: { name: config.sourceChain.name, chainId: config.sourceChain.id, currency: config.sourceChain.nativeCurrency.symbol, rpcUrl: config.sourceRpcUrl, explorerUrl: 'https://explorer.degen.tips', vault: config.sourceVault, confirmations: config.sourceConfirmations.toString() },
+      source: { name: config.sourceChain.name, chainId: config.sourceChain.id, currency: config.sourceChain.nativeCurrency.symbol, rpcUrl: config.sourceRpcUrl, explorerUrl: config.sourceChain.id === 11155111 ? 'https://sepolia.etherscan.io' : 'https://explorer.degen.tips', vault: config.sourceVault, confirmations: config.sourceConfirmations.toString() },
       destination: { name: config.destinationChain.name, chainId: config.destinationChain.id, currency: 'ETH', rpcUrl: config.destinationRpcUrl, explorerUrl: config.destinationChain.id === 8453 ? 'https://basescan.org' : 'https://sepolia.basescan.org', mirror: config.mirror, confirmations: config.destinationConfirmations.toString() },
       relayer: config.relayerAddress,
       publicAppUrl: config.publicAppUrl

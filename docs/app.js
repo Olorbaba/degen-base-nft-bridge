@@ -2,10 +2,10 @@ import { createPublicClient, createWalletClient, custom, decodeEventLog, formatE
 
 const API_BASE = window.BRIDGE_API_URL || (location.hostname.endsWith('github.io') ? '' : location.origin);
 const proof = {
-  source: { address: '0x7584A721bB18E1531694a0c88D56B55CCB70D06C', tx: '0x6c35817a2fc63db4a880925e06df460cf467f497f1a3350f9eee5e316dafdbd5', rpc: 'https://rpc.degen.tips' },
-  destination: { address: '0xa0A44dEAD4F124B425DeE4466d542DD612D10517', tx: '0x927ed03498494d7baaabb719f63e2f28864c4c38e17ec9e73b0c4a963710046b', rpc: 'https://sepolia.base.org' },
-  bridgeId: '0x47cf81e47f03d6da07e39baf01139dbeb0dd821fee01512eff49e46b21751751',
-  collection: '0x436e764419B7e0Ef0BFdf3D28f2faF1264810DCf', recipient: '0xbFdD3790aBb0768FAe791cf1c551F15Aa7Bb498f'
+  source: { address: '0xC6a0208aE6FAb9c5Ddfe59700900EBcC6661A8a2', tx: '0xce77a76c2e844dd88cd1125efacc32fb8060f10d2d1de8a7d63a3784dc152e35', rpc: 'https://ethereum-sepolia-rpc.publicnode.com' },
+  destination: { address: '0xa0A44dEAD4F124B425DeE4466d542DD612D10517', tx: '0x118a89de268719820cca1a414d36382f67dc670fba19d74478c816c45c6d6c14', rpc: 'https://sepolia.base.org' },
+  bridgeId: '0xc46a638002a527d7cf70cd18ee46928c9b585a366ec3b5d915a98b6e9e8cd84b',
+  collection: '0x63eb1893E15c98E866F636A6974B5DA3b44CEdEA', recipient: '0xbFdD3790aBb0768FAe791cf1c551F15Aa7Bb498f'
 };
 const sourceAbi = [
   { type: 'function', name: 'bridge', stateMutability: 'nonpayable', inputs: [{ name: 'collection', type: 'address' }, { name: 'tokenId', type: 'uint256' }], outputs: [{ name: 'id', type: 'bytes32' }] },
@@ -37,7 +37,7 @@ setView(location.hash.slice(1) || 'bridge');
 
 async function api(path) { const response = await fetch(`${API_BASE}${path}`, { headers: { accept: 'application/json' } }); if (!response.ok) throw new Error(`API ${response.status}`); return response.json(); }
 function fallbackConfig() {
-  return { bridgeEnabled: false, safetyReason: 'The live status API is not connected. Bridge transactions remain disabled.', routeMode: 'controlled-test', source: { name: 'Degen Chain', chainId: 666666666, currency: 'DEGEN', rpcUrl: proof.source.rpc, explorerUrl: 'https://explorer.degen.tips', vault: proof.source.address }, destination: { name: 'Base Sepolia', chainId: 84532, currency: 'ETH', rpcUrl: proof.destination.rpc, explorerUrl: 'https://sepolia.basescan.org', mirror: proof.destination.address }, relayer: '0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D' };
+  return { bridgeEnabled: false, safetyReason: 'The live testnet relayer API is not connected. Bridge transactions remain disabled.', routeMode: 'public-testnet', source: { name: 'Ethereum Sepolia', chainId: 11155111, currency: 'ETH', rpcUrl: proof.source.rpc, explorerUrl: 'https://sepolia.etherscan.io', vault: proof.source.address }, destination: { name: 'Base Sepolia', chainId: 84532, currency: 'ETH', rpcUrl: proof.destination.rpc, explorerUrl: 'https://sepolia.basescan.org', mirror: proof.destination.address }, relayer: '0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D' };
 }
 async function loadConfig() {
   try { state.config = await api('/api/config'); state.apiOnline = true; setApiIndicator('online', 'API online'); }
@@ -65,7 +65,7 @@ async function loadStatus(silent = false) {
   } catch (error) {
     if (!silent) toast('Live relayer API is not hosted yet. Showing verified static proof.', 'error');
     state.status = state.status || { queue: { waiting: 0, submitted: 0, completed: 1, failed: 0 }, balances: { degen: '—', eth: '—' }, blocks: {}, runtime: {} };
-    state.transfers = state.transfers.length ? state.transfers : [{ id: proof.bridgeId, sourceCollection: proof.collection, sourceTokenId: '1', holder: proof.recipient, sourceTxHash: proof.source.tx, destinationTxHash: proof.destination.tx, mirrorTokenId: '1', status: 'completed', completedAt: '2026-08-12T03:51:56.313Z' }];
+    state.transfers = state.transfers.length ? state.transfers : [{ id: proof.bridgeId, sourceCollection: proof.collection, sourceTokenId: '1', holder: proof.recipient, sourceTxHash: proof.source.tx, destinationTxHash: proof.destination.tx, mirrorTokenId: '3', status: 'completed', completedAt: '2026-08-12T11:31:31.991Z' }];
   }
   renderStatus(); renderTransfers();
 }
@@ -133,7 +133,7 @@ async function inspectNft(event) {
     $('nft-name').textContent = metadata.name || `Token #${tokenId}`; $('nft-description').textContent = metadata.description || 'No description supplied.'; $('nft-owner').textContent = short(owner); $('nft-owner').title = owner; $('nft-uri-type').textContent = metadata.type;
     const media = $('nft-media'); media.innerHTML = '<span>NFT</span>'; if (metadata.image) { const image = document.createElement('img'); image.src = mediaUrl(metadata.image); image.alt = metadata.name || 'NFT preview'; image.onerror = () => image.remove(); media.append(image); }
     $('nft-preview').hidden = false; $('step-inspect').classList.add('complete'); $('step-inspect').classList.remove('current'); $('step-approve').classList.toggle('complete', approved); $('step-approve').classList.toggle('current', !approved); $('step-bridge').classList.toggle('current', approved); updateTransactionAction();
-  } catch (error) { state.nft = null; toast(error.shortMessage || 'Unable to read this NFT on Degen Chain.', 'error'); }
+  } catch (error) { state.nft = null; toast(error.shortMessage || 'Unable to read this NFT on Ethereum Sepolia.', 'error'); }
   finally { button.disabled = false; button.textContent = 'Inspect NFT'; }
 }
 $('nft-form').addEventListener('submit', inspectNft);
@@ -152,12 +152,14 @@ async function transactionAction() {
   await requireSafeRoute(); await switchChain(state.config.source); const button = $('transaction-action'); button.disabled = true;
   try {
     if (action === 'approve') {
-      button.textContent = 'Confirm approval in wallet…'; const hash = await state.wallet.writeContract({ account: state.account, address: state.nft.collection, abi: nftAbi, functionName: 'approve', args: [state.config.source.vault, state.nft.tokenId] });
+      button.textContent = 'Confirm approval in wallet…'; const sourceWallet = createWalletClient({ account: state.account, chain: { id: state.config.source.chainId, name: state.config.source.name, nativeCurrency: { name: 'Ether', symbol: state.config.source.currency, decimals: 18 }, rpcUrls: { default: { http: [state.config.source.rpcUrl] } } }, transport: custom(window.ethereum) }); const hash = await sourceWallet.writeContract({ account: state.account, chain: sourceWallet.chain, address: state.nft.collection, abi: nftAbi, functionName: 'approve', args: [state.config.source.vault, state.nft.tokenId] });
       const client = createPublicClient({ transport: http(state.config.source.rpcUrl) }); await client.waitForTransactionReceipt({ hash }); state.nft.approved = true; $('step-approve').classList.add('complete'); $('step-approve').classList.remove('current'); $('step-bridge').classList.add('current'); toast('Vault approval confirmed', 'success');
     } else {
-      button.textContent = 'Confirm permanent lock…'; const hash = await state.wallet.writeContract({ account: state.account, address: state.config.source.vault, abi: sourceAbi, functionName: 'bridge', args: [state.nft.collection, state.nft.tokenId] });
-      const client = createPublicClient({ transport: http(state.config.source.rpcUrl) }); const receipt = await client.waitForTransactionReceipt({ hash }); let bridgeId = null; for (const log of receipt.logs) { try { const decoded = decodeEventLog({ abi: sourceAbi, data: log.data, topics: log.topics }); if (decoded.eventName === 'NFTBridged') bridgeId = decoded.args.id; } catch {} }
-      $('step-bridge').classList.add('complete'); $('step-bridge').classList.remove('current'); $('summary-status').textContent = 'Deposited'; button.textContent = 'Bridge record created'; button.disabled = true; toast(`NFT locked${bridgeId ? ` · ${short(bridgeId)}` : ''}`, 'success'); await loadStatus(true);
+      button.textContent = 'Confirm permanent lock…'; const sourceWallet = createWalletClient({ account: state.account, chain: { id: state.config.source.chainId, name: state.config.source.name, nativeCurrency: { name: 'Ether', symbol: state.config.source.currency, decimals: 18 }, rpcUrls: { default: { http: [state.config.source.rpcUrl] } } }, transport: custom(window.ethereum) }); const hash = await sourceWallet.writeContract({ account: state.account, chain: sourceWallet.chain, address: state.config.source.vault, abi: sourceAbi, functionName: 'bridge', args: [state.nft.collection, state.nft.tokenId] });
+      const client = createPublicClient({ transport: http(state.config.source.rpcUrl) }); const receipt = await client.waitForTransactionReceipt({ hash, confirmations: Number(state.config.source.confirmations || 1) + 1 }); let bridgeId = null; for (const log of receipt.logs) { try { const decoded = decodeEventLog({ abi: sourceAbi, data: log.data, topics: log.topics }); if (decoded.eventName === 'NFTBridged') bridgeId = decoded.args.id; } catch {} }
+      $('step-bridge').classList.add('complete'); $('step-bridge').classList.remove('current'); $('summary-status').textContent = 'Deposited'; button.textContent = 'Bridge record created'; button.disabled = true; toast(`NFT locked${bridgeId ? ` · ${short(bridgeId)}` : ''}`, 'success');
+      if (bridgeId) { const relayResponse = await fetch(`${API_BASE}/api/relay`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ bridgeId }) }); const relayResult = await relayResponse.json(); if (!relayResponse.ok) throw new Error(relayResult.error || 'Relayer request failed'); toast(relayResult.status === 'completed' ? 'NFT was already minted on Base Sepolia' : `Base Sepolia mint submitted · ${short(relayResult.destinationTxHash)}`, 'success'); }
+      await loadStatus(true);
     }
   } catch (error) { toast(error.shortMessage || error.message, 'error'); }
   finally { updateTransactionAction(); }
@@ -167,7 +169,7 @@ $('transaction-action').addEventListener('click', transactionAction);
 async function fundRelayer(event) {
   event.preventDefault(); if (!state.account) await connectWallet(); if (!state.account) return; const chainKey = event.currentTarget.dataset.chain; const chain = chainKey === 'base' ? state.config.destination : state.config.source; const input = event.currentTarget.querySelector('input');
   if (!input.value || Number(input.value) <= 0) return toast('Enter an amount greater than zero.', 'error');
-  try { await switchChain(chain); const hash = await state.wallet.sendTransaction({ account: state.account, to: state.config.relayer, value: parseEther(input.value) }); toast(`${chain.currency} top-up submitted: ${short(hash)}`, 'success'); input.value = ''; setTimeout(() => loadStatus(true), 5000); }
+  try { await switchChain(chain); const wallet = createWalletClient({ account: state.account, chain: { id: chain.chainId, name: chain.name, nativeCurrency: { name: chain.currency === 'ETH' ? 'Ether' : chain.currency, symbol: chain.currency, decimals: 18 }, rpcUrls: { default: { http: [chain.rpcUrl] } } }, transport: custom(window.ethereum) }); const hash = await wallet.sendTransaction({ account: state.account, chain: wallet.chain, to: state.config.relayer, value: parseEther(input.value) }); toast(`${chain.currency} top-up submitted: ${short(hash)}`, 'success'); input.value = ''; setTimeout(() => loadStatus(true), 5000); }
   catch (error) { toast(error.shortMessage || error.message, 'error'); }
 }
 document.querySelectorAll('.fund-form').forEach(form => form.addEventListener('submit', fundRelayer));
@@ -175,11 +177,11 @@ $('copy-relayer').addEventListener('click', async () => { await navigator.clipbo
 
 function wireProof() {
   $('bridge-id').textContent = short(proof.bridgeId, 10, 8); $('bridge-id').title = proof.bridgeId; $('recipient').textContent = short(proof.recipient); $('recipient').title = proof.recipient;
-  Object.assign($('source-collection'), { textContent: short(proof.collection), href: `https://explorer.degen.tips/address/${proof.collection}` }); $('source-tx').href = `https://explorer.degen.tips/tx/${proof.source.tx}`; $('destination-tx').href = `https://sepolia.basescan.org/tx/${proof.destination.tx}`;
+  Object.assign($('source-collection'), { textContent: short(proof.collection), href: `https://sepolia.etherscan.io/address/${proof.collection}` }); $('source-tx').href = `https://sepolia.etherscan.io/tx/${proof.source.tx}`; $('destination-tx').href = `https://sepolia.basescan.org/tx/${proof.destination.tx}`;
 }
 $('verify-button').addEventListener('click', async () => {
   const button = $('verify-button'); const output = $('verification-output'); button.disabled = true; button.textContent = 'Verifying…'; output.hidden = true;
-  try { const [sourceClient, destinationClient] = [createPublicClient({ transport: http(proof.source.rpc, { retryCount: 4 }) }), createPublicClient({ transport: http(proof.destination.rpc, { retryCount: 4 }) })]; const [sourceCode, destinationCode, sourceReceipt, destinationReceipt] = await Promise.all([sourceClient.getCode({ address: proof.source.address }), destinationClient.getCode({ address: proof.destination.address }), sourceClient.getTransactionReceipt({ hash: proof.source.tx }), destinationClient.getTransactionReceipt({ hash: proof.destination.tx })]); if (!sourceCode || !destinationCode || sourceReceipt.status !== 'success' || destinationReceipt.status !== 'success') throw new Error('One or more checks failed'); output.hidden = false; output.textContent = `✓ Degen vault runtime bytecode found\n✓ Source lock confirmed in block ${sourceReceipt.blockNumber}\n✓ Base mirror runtime bytecode found\n✓ Destination mint confirmed in block ${destinationReceipt.blockNumber}\n✓ Bridge evidence matches ${proof.bridgeId}`; toast('Deployment verified on both chains', 'success'); }
+  try { const [sourceClient, destinationClient] = [createPublicClient({ transport: http(proof.source.rpc, { retryCount: 4 }) }), createPublicClient({ transport: http(proof.destination.rpc, { retryCount: 4 }) })]; const [sourceCode, destinationCode, sourceReceipt, destinationReceipt] = await Promise.all([sourceClient.getCode({ address: proof.source.address }), destinationClient.getCode({ address: proof.destination.address }), sourceClient.getTransactionReceipt({ hash: proof.source.tx }), destinationClient.getTransactionReceipt({ hash: proof.destination.tx })]); if (!sourceCode || !destinationCode || sourceReceipt.status !== 'success' || destinationReceipt.status !== 'success') throw new Error('One or more checks failed'); output.hidden = false; output.textContent = `✓ Ethereum Sepolia vault runtime bytecode found\n✓ Source lock confirmed in block ${sourceReceipt.blockNumber}\n✓ Base Sepolia mirror runtime bytecode found\n✓ Destination mint confirmed in block ${destinationReceipt.blockNumber}\n✓ Bridge evidence matches ${proof.bridgeId}`; toast('Deployment verified on both testnets', 'success'); }
   catch (error) { output.hidden = false; output.textContent = `Public RPC verification is temporarily unavailable. Explorer links remain authoritative.\n\n${error.message}`; toast('A public RPC could not be reached.', 'error'); }
   finally { button.disabled = false; button.textContent = 'Verify on-chain'; }
 });

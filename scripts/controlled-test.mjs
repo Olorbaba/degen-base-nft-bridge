@@ -5,9 +5,13 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { sourceAbi } from '../src/abis.js';
 
 const env = process.env;
-const required = ['DEGEN_RPC_URL', 'DEPLOYER_PRIVATE_KEY', 'SOURCE_VAULT_ADDRESS', 'TEST_NFT_OWNER'];
+const required = ['DEPLOYER_PRIVATE_KEY', 'SOURCE_VAULT_ADDRESS', 'TEST_NFT_OWNER'];
 for (const name of required) if (!env[name]) throw new Error(`${name} is required`);
-if (env.ALLOW_HYBRID_BRIDGE !== 'true') throw new Error('ALLOW_HYBRID_BRIDGE must be true for the controlled test');
+const sourceRpcUrl = env.SOURCE_RPC_URL || env.DEGEN_RPC_URL;
+if (!sourceRpcUrl) throw new Error('SOURCE_RPC_URL is required');
+const sourceChainId = Number(env.SOURCE_CHAIN_ID || env.DEGEN_CHAIN_ID || 11155111);
+const destinationChainId = Number(env.BASE_CHAIN_ID || 84532);
+if (sourceChainId === 666666666 && destinationChainId === 84532 && env.ALLOW_HYBRID_BRIDGE !== 'true') throw new Error('ALLOW_HYBRID_BRIDGE must be true for a Degen-mainnet → Base-Sepolia controlled test');
 
 const account = privateKeyToAccount(env.DEPLOYER_PRIVATE_KEY);
 if (account.address.toLowerCase() !== env.TEST_NFT_OWNER.toLowerCase()) {
@@ -15,12 +19,12 @@ if (account.address.toLowerCase() !== env.TEST_NFT_OWNER.toLowerCase()) {
 }
 
 const chain = defineChain({
-  id: Number(env.DEGEN_CHAIN_ID || 666666666),
-  name: 'Degen',
-  nativeCurrency: { name: 'DEGEN', symbol: 'DEGEN', decimals: 18 },
-  rpcUrls: { default: { http: [env.DEGEN_RPC_URL] } }
+  id: sourceChainId,
+  name: env.SOURCE_CHAIN_NAME || (sourceChainId === 11155111 ? 'Ethereum Sepolia' : 'Degen Chain'),
+  nativeCurrency: { name: env.SOURCE_CURRENCY_SYMBOL === 'DEGEN' ? 'DEGEN' : 'Ether', symbol: env.SOURCE_CURRENCY_SYMBOL || (sourceChainId === 666666666 ? 'DEGEN' : 'ETH'), decimals: 18 },
+  rpcUrls: { default: { http: [sourceRpcUrl] } }
 });
-const transport = http(env.DEGEN_RPC_URL, { retryCount: 5, retryDelay: 1_000, timeout: 30_000 });
+const transport = http(sourceRpcUrl, { retryCount: 5, retryDelay: 1_000, timeout: 30_000 });
 const client = createPublicClient({ chain, transport });
 const wallet = createWalletClient({ account, chain, transport });
 const artifact = JSON.parse(fs.readFileSync('./out/ControlledTestNft.sol/ControlledTestNft.json', 'utf8'));
@@ -59,4 +63,3 @@ const logs = parseEventLogs({ abi: sourceAbi, eventName: 'NFTBridged', logs: bri
 if (logs.length !== 1) throw new Error(`expected one NFTBridged event, found ${logs.length}`);
 console.log(`Bridge ID: ${logs[0].args.id}`);
 console.log(`Source block: ${bridgeReceipt.blockNumber}`);
-

@@ -1,8 +1,8 @@
 # Degen → Base one-way NFT bridge
 
-A centralized, one-way ERC-721 bridge from Degen Chain to Base. The source NFT is permanently locked, and a mirror NFT carrying the same `tokenURI` is minted to the original holder on Base.
+A centralized, one-way ERC-721 bridge designed for Degen Chain → Base. The public evaluation release uses Ethereum Sepolia → Base Sepolia so judges can safely test the complete workflow with valueless NFTs.
 
-> Current release: controlled test deployment. The cross-chain test passed, but public relaying is intentionally disabled until the Base mainnet production deployment. Do not deposit valuable NFTs into the deployed Degen vault.
+> Current release: public two-testnet deployment. Use test NFTs only; the source lock remains permanent by design.
 
 Live application and read-only status API: **https://degen-base-nft-bridge.vercel.app**
 
@@ -20,10 +20,10 @@ Universal ERC-721 burning is impossible because standard NFT collections do not 
 
 | Component | Network | Address |
 | --- | --- | --- |
-| Source vault | Degen Chain | `0x7584A721bB18E1531694a0c88D56B55CCB70D06C` |
+| Source vault | Ethereum Sepolia | `0xC6a0208aE6FAb9c5Ddfe59700900EBcC6661A8a2` |
 | Destination mirror | Base Sepolia | `0xa0A44dEAD4F124B425DeE4466d542DD612D10517` |
 
-The controlled test bridged a newly created, valueless Degen NFT to Base Sepolia. See [DEPLOYMENT.md](./DEPLOYMENT.md) for transactions, independent verification instructions, security properties, and the Base mainnet rollout plan. Machine-readable addresses are in [deployments.json](./deployments.json).
+The controlled test bridged a newly created, valueless Ethereum Sepolia NFT to Base Sepolia. See [DEPLOYMENT.md](./DEPLOYMENT.md) for transactions, independent verification instructions, security properties, and the Base mainnet rollout plan. Machine-readable addresses are in [deployments.json](./deployments.json).
 
 ## Install and test
 
@@ -40,10 +40,10 @@ The application includes four operational views:
 
 - **Bridge**: wallet connection, network switching, ERC-721 inspection, metadata preview, approval, and source deposit.
 - **Transfers**: waiting, submitted, completed, and failed bridge records.
-- **Relayer**: live Base ETH and DEGEN balances, queue depth, checkpoints, and native-token top-up forms.
+- **Relayer**: live source and Base Sepolia ETH balances, queue depth, checkpoints, and native-token top-up forms.
 - **Proof**: independently verifiable controlled deployment evidence.
 
-The current server-provided safety configuration disables approval and bridge transactions for the Degen-mainnet → Base-Sepolia proof route.
+The current server-provided configuration enables the public Ethereum Sepolia → Base Sepolia test route. The former Degen-mainnet → Base-Sepolia hybrid route remains retired.
 
 Independently verify the live test deployment without a wallet or private key:
 
@@ -57,7 +57,8 @@ Copy `.env.example` to `.env`. Use a dedicated deployer, a low-balance relayer k
 
 Important variables:
 
-- `SOURCE_VAULT_ADDRESS`: deployed Degen vault.
+- `SOURCE_RPC_URL` / `SOURCE_CHAIN_ID`: current source network (Ethereum Sepolia for evaluation; Degen Chain for production).
+- `SOURCE_VAULT_ADDRESS`: deployed source vault.
 - `SOURCE_START_BLOCK`: vault deployment block.
 - `BASE_MIRROR_ADDRESS`: destination mirror.
 - `RELAYER_PRIVATE_KEY`: destination mint-authority key.
@@ -78,12 +79,13 @@ The service exposes:
 - `GET /api/status`: balances, queue metrics, blocks, checkpoints, and runtime state.
 - `GET /api/transfers`: indexed transfer records.
 - `GET /api/transfers/:id`: one transfer by bridge ID.
+- `POST /api/relay`: validates a finalized source-vault event and submits its Base Sepolia mint.
 
 A container deployment template with durable state is provided in `compose.example.yml` for the future always-on production relayer.
 
-The controlled-test application and read-only status API are Vercel-compatible. Import this repository into Vercel with the repository root as the project root; `vercel.json` serves the frontend from `docs/` and the serverless endpoints from `api/`. No private key or paid always-on instance is required for this proof release.
+The test application, live status API, and validated testnet relay trigger are Vercel-compatible. Import this repository into Vercel with the repository root as the project root; `vercel.json` serves the frontend from `docs/` and the serverless endpoints from `api/`. The low-balance testnet relayer key must be stored only in a Vercel Sensitive environment variable.
 
-Vercel is intentionally used only for the safety-locked frontend and read-only API. The Base-mainnet minting relayer must run as an always-on process with durable state on Railway, Fly.io, a VPS, or equivalent production infrastructure. Store the relayer key only in that provider's encrypted secrets.
+The Base-mainnet relayer must run as an always-on process with durable state on Railway, Fly.io, a VPS, or equivalent production infrastructure. Store its dedicated key only in that provider's encrypted secrets.
 
 ## User transaction
 
@@ -94,8 +96,8 @@ DegenNftVault(vault).bridge(collection, tokenId);
 
 The source transaction is irreversible. Direct safe transfers to the vault are rejected; users must call `bridge` so a canonical record is created.
 
-## Current safety lock
+## Current public test route
 
-Degen's former public testnet is unavailable. The proof deployment therefore used Degen mainnet with a purpose-built worthless NFT and Base Sepolia as the destination. `ALLOW_HYBRID_BRIDGE=false` prevents the server from running this unsafe network pairing publicly.
+Degen's former public testnet is unavailable. To avoid locking real Degen NFTs during evaluation, the public application now uses Ethereum Sepolia as the source and Base Sepolia as the destination. The relay endpoint verifies every bridge ID against a finalized event from the configured source vault before minting.
 
 For production, deploy `BaseNftMirror` on Base mainnet, switch the destination configuration, complete an independent review, and begin with a capped pilot. See [SECURITY.md](./SECURITY.md).

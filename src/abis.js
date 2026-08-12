@@ -16,6 +16,11 @@ export const sourceAbi = [
 ];
 
 export const mirrorAbi = [
+  { type: 'event', name: 'MirrorMinted', inputs: [
+    { indexed: true, name: 'bridgeId', type: 'bytes32' }, { indexed: true, name: 'mirrorTokenId', type: 'uint256' },
+    { indexed: true, name: 'recipient', type: 'address' }, { indexed: false, name: 'sourceCollection', type: 'address' },
+    { indexed: false, name: 'sourceTokenId', type: 'uint256' }, { indexed: false, name: 'tokenUri', type: 'string' }
+  ], anonymous: false },
   { type: 'function', name: 'mintFromDegen', stateMutability: 'nonpayable', inputs: [
     { name: 'bridgeId', type: 'bytes32' }, { name: 'recipient', type: 'address' },
     { name: 'sourceCollection', type: 'address' }, { name: 'sourceTokenId', type: 'uint256' }, { name: 'tokenUri', type: 'string' }

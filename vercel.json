@@ -4,6 +4,7 @@
   "outputDirectory": "docs",
   "routes": [
     { "handle": "filesystem" },
+    { "src": "/api/relay", "dest": "/api/relay.js" },
     { "src": "/api/transfers/(.*)", "dest": "/api/transfers.js?id=$1" },
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/", "dest": "/docs/index.html" },

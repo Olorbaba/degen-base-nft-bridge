@@ -47,3 +47,17 @@ test('read-only hybrid API starts without a private key and keeps bridging disab
   assert.equal(result.relayEnabled, false);
   assert.match(result.safetyReason, /proof route/);
 });
+
+test('Ethereum Sepolia source configuration uses generic source variables', () => {
+  const result = readConfig({
+    SOURCE_RPC_URL: 'https://ethereum-sepolia-rpc.publicnode.com', SOURCE_CHAIN_ID: '11155111',
+    SOURCE_CHAIN_NAME: 'Ethereum Sepolia', SOURCE_CURRENCY_SYMBOL: 'ETH',
+    BASE_RPC_URL: 'https://sepolia.base.org', BASE_CHAIN_ID: '84532',
+    SOURCE_VAULT_ADDRESS: address, BASE_MIRROR_ADDRESS: `0x${'22'.repeat(20)}`,
+    RELAYER_ADDRESS: address, RELAY_ENABLED: 'false'
+  });
+  assert.equal(result.sourceChain.id, 11155111);
+  assert.equal(result.sourceChain.name, 'Ethereum Sepolia');
+  assert.equal(result.sourceChain.nativeCurrency.symbol, 'ETH');
+  assert.equal(result.hybridRoute, false);
+});

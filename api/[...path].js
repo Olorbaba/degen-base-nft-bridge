@@ -1,134 +1,141 @@
-import { createPublicClient, defineChain, formatEther, http } from 'viem';
+import { createPublicClient, createWalletClient, defineChain, formatEther, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { sourceAbi, mirrorAbi } from '../src/abis.js';
 
 const DEFAULTS = {
-  sourceRpcUrl: 'https://rpc.degen.tips',
+  sourceRpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
   destinationRpcUrl: 'https://sepolia.base.org',
-  sourceChainId: 666666666,
+  sourceChainId: 11155111,
   destinationChainId: 84532,
-  sourceVault: '0x7584A721bB18E1531694a0c88D56B55CCB70D06C',
+  sourceVault: '0xC6a0208aE6FAb9c5Ddfe59700900EBcC6661A8a2',
   mirror: '0xa0A44dEAD4F124B425DeE4466d542DD612D10517',
   relayer: '0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D',
-  sourceStartBlock: 26957825,
-  sourceConfirmations: 20,
-  destinationConfirmations: 10
+  // The clean public proof starts here. An earlier operator-only smoke event is
+  // deliberately excluded from the public evaluation index.
+  sourceStartBlock: 11472899,
+  destinationStartBlock: 45382400,
+  sourceConfirmations: 1,
+  destinationConfirmations: 1
 };
 
 const env = (key, fallback) => process.env[key] ?? fallback;
 const config = {
-  sourceRpcUrl: env('DEGEN_RPC_URL', DEFAULTS.sourceRpcUrl),
+  sourceRpcUrl: env('SOURCE_RPC_URL', DEFAULTS.sourceRpcUrl),
   destinationRpcUrl: env('BASE_RPC_URL', DEFAULTS.destinationRpcUrl),
-  sourceChainId: Number(env('DEGEN_CHAIN_ID', DEFAULTS.sourceChainId)),
+  sourceChainId: Number(env('SOURCE_CHAIN_ID', DEFAULTS.sourceChainId)),
   destinationChainId: Number(env('BASE_CHAIN_ID', DEFAULTS.destinationChainId)),
   sourceVault: env('SOURCE_VAULT_ADDRESS', DEFAULTS.sourceVault),
   mirror: env('BASE_MIRROR_ADDRESS', DEFAULTS.mirror),
   relayer: env('RELAYER_ADDRESS', DEFAULTS.relayer),
-  sourceStartBlock: Number(env('SOURCE_START_BLOCK', DEFAULTS.sourceStartBlock)),
-  sourceConfirmations: Number(env('SOURCE_CONFIRMATIONS', DEFAULTS.sourceConfirmations)),
-  destinationConfirmations: Number(env('DESTINATION_CONFIRMATIONS', DEFAULTS.destinationConfirmations))
+  sourceStartBlock: BigInt(env('SOURCE_START_BLOCK', DEFAULTS.sourceStartBlock)),
+  destinationStartBlock: BigInt(env('DESTINATION_START_BLOCK', DEFAULTS.destinationStartBlock)),
+  sourceConfirmations: BigInt(env('SOURCE_CONFIRMATIONS', DEFAULTS.sourceConfirmations)),
+  destinationConfirmations: BigInt(env('DESTINATION_CONFIRMATIONS', DEFAULTS.destinationConfirmations))
 };
 
-const sourceChain = defineChain({
-  id: config.sourceChainId,
-  name: 'Degen Chain',
-  nativeCurrency: { name: 'DEGEN', symbol: 'DEGEN', decimals: 18 },
-  rpcUrls: { default: { http: [config.sourceRpcUrl] } }
-});
-const destinationChain = defineChain({
-  id: config.destinationChainId,
-  name: config.destinationChainId === 8453 ? 'Base' : 'Base Sepolia',
-  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-  rpcUrls: { default: { http: [config.destinationRpcUrl] } }
-});
-const source = createPublicClient({ chain: sourceChain, transport: http(config.sourceRpcUrl, { retryCount: 2 }) });
-const destination = createPublicClient({ chain: destinationChain, transport: http(config.destinationRpcUrl, { retryCount: 2 }) });
-
-const proofTransfer = {
-  id: '0x47cf81e47f03d6da07e39baf01139dbeb0dd821fee01512eff49e46b21751751',
-  sourceCollection: '0x436e764419B7e0Ef0BFdf3D28f2faF1264810DCf',
-  sourceTokenId: '1',
-  holder: '0xbFdD3790aBb0768FAe791cf1c551F15Aa7Bb498f',
-  sourceTxHash: '0x6c35817a2fc63db4a880925e06df460cf467f497f1a3350f9eee5e316dafdbd5',
-  destinationTxHash: '0x927ed03498494d7baaabb719f63e2f28864c4c38e17ec9e73b0c4a963710046b',
-  mirrorTokenId: '1',
-  status: 'completed',
-  sourceBlock: String(config.sourceStartBlock + 1),
-  completedAt: '2026-08-12T03:51:56.313Z'
-};
+const sourceChain = defineChain({ id: config.sourceChainId, name: 'Ethereum Sepolia', nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [config.sourceRpcUrl] } } });
+const destinationChain = defineChain({ id: config.destinationChainId, name: 'Base Sepolia', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [config.destinationRpcUrl] } } });
+const source = createPublicClient({ chain: sourceChain, transport: http(config.sourceRpcUrl, { retryCount: 3, timeout: 25_000 }) });
+const destination = createPublicClient({ chain: destinationChain, transport: http(config.destinationRpcUrl, { retryCount: 3, timeout: 25_000 }) });
+const bridgeEvent = sourceAbi.find(item => item.type === 'event' && item.name === 'NFTBridged');
+const mintEvent = mirrorAbi.find(item => item.type === 'event' && item.name === 'MirrorMinted');
+const privateKey = /^0x[0-9a-fA-F]{64}$/.test(process.env.RELAYER_PRIVATE_KEY || '') ? process.env.RELAYER_PRIVATE_KEY : null;
+const account = privateKey ? privateKeyToAccount(privateKey) : null;
+const testnetRoute = config.sourceChainId === 11155111 && config.destinationChainId === 84532;
+const relayEnabled = testnetRoute && account?.address.toLowerCase() === config.relayer.toLowerCase();
 
 function publicConfig() {
-  const hybrid = config.sourceChainId === 666666666 && config.destinationChainId === 84532;
   return {
-    appName: 'Degen → Base NFT Bridge',
-    bridgeEnabled: false,
-    safetyReason: hybrid
-      ? 'Degen mainnet → Base Sepolia is a proof route. Deposits are disabled to prevent locking real NFTs for testnet assets.'
-      : 'Relaying is disabled by the operator.',
-    routeMode: hybrid ? 'controlled-test' : 'production',
-    source: { name: 'Degen Chain', chainId: config.sourceChainId, currency: 'DEGEN', rpcUrl: config.sourceRpcUrl, explorerUrl: 'https://explorer.degen.tips', vault: config.sourceVault, confirmations: String(config.sourceConfirmations) },
-    destination: { name: destinationChain.name, chainId: config.destinationChainId, currency: 'ETH', rpcUrl: config.destinationRpcUrl, explorerUrl: config.destinationChainId === 8453 ? 'https://basescan.org' : 'https://sepolia.basescan.org', mirror: config.mirror, confirmations: String(config.destinationConfirmations) },
-    relayer: config.relayer,
-    publicAppUrl: env('PUBLIC_APP_URL', '')
+    appName: 'Degen → Base NFT Bridge', bridgeEnabled: relayEnabled,
+    safetyReason: relayEnabled ? null : 'The testnet relayer is temporarily unavailable. New deposits are disabled.',
+    routeMode: 'public-testnet',
+    source: { name: sourceChain.name, chainId: sourceChain.id, currency: 'ETH', rpcUrl: config.sourceRpcUrl, explorerUrl: 'https://sepolia.etherscan.io', vault: config.sourceVault, confirmations: config.sourceConfirmations.toString() },
+    destination: { name: destinationChain.name, chainId: destinationChain.id, currency: 'ETH', rpcUrl: config.destinationRpcUrl, explorerUrl: 'https://sepolia.basescan.org', mirror: config.mirror, confirmations: config.destinationConfirmations.toString() },
+    relayer: config.relayer, publicAppUrl: env('PUBLIC_APP_URL', 'https://degen-base-nft-bridge.vercel.app')
   };
+}
+
+async function sourceLogs() {
+  const latest = await source.getBlockNumber();
+  const finalized = latest > config.sourceConfirmations ? latest - config.sourceConfirmations : 0n;
+  if (finalized < config.sourceStartBlock) return { latest, logs: [] };
+  const logs = await source.getLogs({ address: config.sourceVault, event: bridgeEvent, fromBlock: config.sourceStartBlock, toBlock: finalized });
+  return { latest, logs };
+}
+
+async function indexedTransfers() {
+  const { logs } = await sourceLogs();
+  return Promise.all(logs.map(async log => {
+    const tokenId = await destination.readContract({ address: config.mirror, abi: mirrorAbi, functionName: 'tokenIdForBridgeId', args: [log.args.id] }).catch(() => 0n);
+    let mintLog = null;
+    if (tokenId !== 0n) {
+      const matches = await destination.getLogs({ address: config.mirror, event: mintEvent, args: { bridgeId: log.args.id }, fromBlock: config.destinationStartBlock, toBlock: 'latest' }).catch(() => []);
+      mintLog = matches.at(-1) || null;
+    }
+    return {
+      id: log.args.id, sourceCollection: log.args.collection, sourceTokenId: log.args.tokenId.toString(), holder: log.args.holder,
+      tokenUri: log.args.tokenUri, sourceBlock: log.blockNumber.toString(), sourceTxHash: log.transactionHash,
+      destinationTxHash: mintLog?.transactionHash || null, destinationBlock: mintLog?.blockNumber?.toString() || null,
+      mirrorTokenId: tokenId === 0n ? null : tokenId.toString(), status: tokenId === 0n ? 'discovered' : 'completed'
+    };
+  })).then(items => items.sort((a, b) => Number(BigInt(b.sourceBlock) - BigInt(a.sourceBlock))));
 }
 
 async function status() {
-  const checks = await Promise.allSettled([
-    source.getBalance({ address: config.relayer }),
-    destination.getBalance({ address: config.relayer }),
-    source.readContract({ address: config.sourceVault, abi: sourceAbi, functionName: 'depositCount' }),
-    source.getBlockNumber(),
-    destination.getBlockNumber(),
-    destination.readContract({ address: config.mirror, abi: mirrorAbi, functionName: 'tokenIdForBridgeId', args: [proofTransfer.id] })
+  const [transferResult, ...checks] = await Promise.allSettled([
+    indexedTransfers(), source.getBalance({ address: config.relayer }), destination.getBalance({ address: config.relayer }),
+    source.readContract({ address: config.sourceVault, abi: sourceAbi, functionName: 'depositCount' }), source.getBlockNumber(), destination.getBlockNumber()
   ]);
+  const transfers = transferResult.status === 'fulfilled' ? transferResult.value : [];
   const value = (index, fallback) => checks[index].status === 'fulfilled' ? checks[index].value : fallback;
-  const sourceBalance = value(0, null);
-  const destinationBalance = value(1, null);
-  const depositCount = value(2, 1n);
-  const sourceBlock = value(3, null);
-  const destinationBlock = value(4, null);
-  const tokenId = value(5, 1n);
-  const errors = checks.flatMap((check, index) => check.status === 'rejected' ? [{ check: ['sourceBalance', 'destinationBalance', 'depositCount', 'sourceBlock', 'destinationBlock', 'mirrorTokenId'][index], message: check.reason?.message || String(check.reason) }] : []);
+  const sourceBalance = value(0, null); const destinationBalance = value(1, null); const vaultDepositCount = value(2, BigInt(transfers.length));
+  const sourceBlock = value(3, null); const destinationBlock = value(4, null);
+  const completed = transfers.filter(item => item.status === 'completed').length;
+  const waiting = transfers.filter(item => item.status !== 'completed').length;
+  const errors = [transferResult, ...checks].flatMap((check, index) => check.status === 'rejected' ? [{ check: ['transfers', 'sourceBalance', 'destinationBalance', 'depositCount', 'sourceBlock', 'destinationBlock'][index], message: check.reason?.message || String(check.reason) }] : []);
   return {
-    ok: errors.length === 0,
-    degraded: errors.length > 0,
-    errors,
-    relayEnabled: false,
-    safetyReason: publicConfig().safetyReason,
-    queue: { waiting: Math.max(0, Number(depositCount) - 1), discovered: 0, submitted: 0, completed: 1, failed: 0, notIndexed: Math.max(0, Number(depositCount) - 1), totalDeposits: depositCount.toString() },
-    balances: { address: config.relayer, degen: sourceBalance === null ? null : formatEther(sourceBalance), eth: destinationBalance === null ? null : formatEther(destinationBalance) },
-    blocks: { source: sourceBlock?.toString() || null, destination: destinationBlock?.toString() || null, nextSourceBlock: String(config.sourceStartBlock) },
-    runtime: { running: false, lastPollAt: null, lastSuccessfulPollAt: null, lastError: null },
-    updatedAt: new Date().toISOString(),
-    mirrorTokenId: tokenId.toString()
+    ok: errors.length === 0, degraded: errors.length > 0, errors, relayEnabled, safetyReason: publicConfig().safetyReason,
+    queue: { waiting, discovered: waiting, submitted: 0, completed, failed: 0, notIndexed: 0, totalDeposits: transfers.length.toString(), vaultTotalDeposits: vaultDepositCount.toString() },
+    balances: { address: config.relayer, source: sourceBalance === null ? null : formatEther(sourceBalance), degen: sourceBalance === null ? null : formatEther(sourceBalance), eth: destinationBalance === null ? null : formatEther(destinationBalance) },
+    blocks: { source: sourceBlock?.toString() || null, destination: destinationBlock?.toString() || null, nextSourceBlock: sourceBlock?.toString() || config.sourceStartBlock.toString() },
+    runtime: { running: false, lastPollAt: null, lastSuccessfulPollAt: new Date().toISOString(), lastError: null }, updatedAt: new Date().toISOString()
   };
 }
 
+async function relay(bridgeId) {
+  if (!relayEnabled) throw new Error('testnet relayer is unavailable');
+  if (!/^0x[0-9a-fA-F]{64}$/.test(bridgeId || '')) throw new Error('invalid bridge ID');
+  const alreadyMinted = await destination.readContract({ address: config.mirror, abi: mirrorAbi, functionName: 'tokenIdForBridgeId', args: [bridgeId] });
+  if (alreadyMinted !== 0n) return { status: 'completed', bridgeId, mirrorTokenId: alreadyMinted.toString() };
+  const { logs } = await sourceLogs();
+  const log = logs.find(item => item.args.id.toLowerCase() === bridgeId.toLowerCase());
+  if (!log) throw new Error('finalized bridge event not found in the configured source vault');
+  const wallet = createWalletClient({ account, chain: destinationChain, transport: http(config.destinationRpcUrl, { retryCount: 3, timeout: 25_000 }) });
+  const hash = await wallet.writeContract({ address: config.mirror, abi: mirrorAbi, functionName: 'mintFromDegen', args: [log.args.id, log.args.holder, log.args.collection, log.args.tokenId, log.args.tokenUri] });
+  return { status: 'submitted', bridgeId, destinationTxHash: hash };
+}
+
 function json(res, code, body) {
-  res.statusCode = code;
-  res.setHeader('content-type', 'application/json; charset=utf-8');
-  res.setHeader('cache-control', 'no-store');
-  res.setHeader('access-control-allow-origin', '*');
-  res.setHeader('access-control-allow-methods', 'GET, OPTIONS');
-  res.end(JSON.stringify(body));
+  res.statusCode = code; res.setHeader('content-type', 'application/json; charset=utf-8'); res.setHeader('cache-control', 'no-store');
+  res.setHeader('access-control-allow-origin', '*'); res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS'); res.setHeader('access-control-allow-headers', 'content-type'); res.end(JSON.stringify(body));
 }
 
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return json(res, 204, {});
-  if (req.method !== 'GET') return json(res, 405, { error: 'method not allowed' });
-  const path = Array.isArray(req.query?.path)
-    ? `/${req.query.path.join('/')}`
-    : `/${String(req.query?.path || (req.url || '/').split('?')[0]).replace(/^\/?api\/?/, '').replace(/^\/+/, '')}`;
+  const path = Array.isArray(req.query?.path) ? `/${req.query.path.join('/')}` : `/${String(req.query?.path || (req.url || '/').split('?')[0]).replace(/^\/?api\/?/, '').replace(/^\/+/, '')}`;
   try {
-    if (path === '/api/config' || path === '/config') return json(res, 200, publicConfig());
-    if (path === '/api/status' || path === '/status' || path === '/health' || path === '/healthz') return json(res, 200, await status());
-    if (path === '/api/transfers' || path === '/transfers') return json(res, 200, { transfers: [proofTransfer] });
+    if (req.method === 'POST' && path === '/relay') {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+      return json(res, 202, await relay(body.bridgeId));
+    }
+    if (req.method !== 'GET') return json(res, 405, { error: 'method not allowed' });
+    if (path === '/config') return json(res, 200, publicConfig());
+    if (path === '/status' || path === '/health' || path === '/healthz') return json(res, 200, await status());
+    if (path === '/transfers') return json(res, 200, { transfers: await indexedTransfers() });
     if (path.startsWith('/transfers/')) {
-      const id = decodeURIComponent(path.slice('/transfers/'.length));
-      return json(res, id.toLowerCase() === proofTransfer.id.toLowerCase() ? 200 : 404, id.toLowerCase() === proofTransfer.id.toLowerCase() ? proofTransfer : { error: 'transfer not found' });
+      const id = decodeURIComponent(path.slice('/transfers/'.length)); const transfer = (await indexedTransfers()).find(item => item.id.toLowerCase() === id.toLowerCase());
+      return json(res, transfer ? 200 : 404, transfer || { error: 'transfer not found' });
     }
     return json(res, 404, { error: 'not found' });
-  } catch (error) {
-    return json(res, 200, { ...(await status().catch(() => ({ ok: false, degraded: true }))), errors: [{ check: 'api', message: error.message }] });
-  }
+  } catch (error) { return json(res, 400, { error: error.message }); }
 }

@@ -3,8 +3,10 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { createPublicClient, defineChain, formatEther, http } from 'viem';
 
 const env = process.env;
-const required = ['DEGEN_RPC_URL', 'BASE_RPC_URL', 'DEPLOYER_PRIVATE_KEY', 'RELAYER_PRIVATE_KEY', 'RELAYER_ADDRESS', 'MIRROR_OWNER'];
+const sourceRpcUrl = env.SOURCE_RPC_URL || env.DEGEN_RPC_URL;
+const required = ['BASE_RPC_URL', 'DEPLOYER_PRIVATE_KEY', 'RELAYER_PRIVATE_KEY', 'RELAYER_ADDRESS', 'MIRROR_OWNER'];
 const missing = required.filter((name) => !env[name]);
+if (!sourceRpcUrl) missing.unshift('SOURCE_RPC_URL');
 if (missing.length) {
   console.error(`Missing required environment variables: ${missing.join(', ')}`);
   process.exit(1);
@@ -22,15 +24,18 @@ function addr(name) {
   return value;
 }
 
-const degenId = Number(env.DEGEN_CHAIN_ID || 666666666);
+const sourceId = Number(env.SOURCE_CHAIN_ID || env.DEGEN_CHAIN_ID || 11155111);
 const baseId = Number(env.BASE_CHAIN_ID || 84532);
-const degen = defineChain({ id: degenId, name: 'Degen', nativeCurrency: { name: 'DEGEN', symbol: 'DEGEN', decimals: 18 }, rpcUrls: { default: { http: [env.DEGEN_RPC_URL] } } });
+const sourceIsDegen = sourceId === 666666666;
+const sourceSymbol = env.SOURCE_CURRENCY_SYMBOL || (sourceIsDegen ? 'DEGEN' : 'ETH');
+const sourceName = env.SOURCE_CHAIN_NAME || (sourceIsDegen ? 'Degen Chain' : sourceId === 11155111 ? 'Ethereum Sepolia' : `Source chain ${sourceId}`);
+const source = defineChain({ id: sourceId, name: sourceName, nativeCurrency: { name: sourceSymbol === 'ETH' ? 'Ether' : sourceSymbol, symbol: sourceSymbol, decimals: 18 }, rpcUrls: { default: { http: [sourceRpcUrl] } } });
 const base = defineChain({ id: baseId, name: 'Base', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [env.BASE_RPC_URL] } } });
 const deployer = key('DEPLOYER_PRIVATE_KEY');
 const relayer = key('RELAYER_PRIVATE_KEY');
 const configuredRelayer = addr('RELAYER_ADDRESS');
 const owner = addr('MIRROR_OWNER');
-const degenClient = createPublicClient({ chain: degen, transport: http(env.DEGEN_RPC_URL) });
+const sourceClient = createPublicClient({ chain: source, transport: http(sourceRpcUrl) });
 const baseClient = createPublicClient({ chain: base, transport: http(env.BASE_RPC_URL) });
 
 async function check(client, chain, label, account) {
@@ -42,16 +47,16 @@ async function check(client, chain, label, account) {
 }
 
 try {
-  if (degenId === 666666666 && env.ALLOW_DEGEN_MAINNET !== 'true') {
+  if (sourceId === 666666666 && env.ALLOW_DEGEN_MAINNET !== 'true') {
     throw new Error('Degen mainnet is blocked by default; set ALLOW_DEGEN_MAINNET=true only after an explicit real-asset go-live decision');
   }
-  if (degenId === 666666666 && baseId === 84532 && env.ALLOW_HYBRID_BRIDGE !== 'true') {
+  if (sourceId === 666666666 && baseId === 84532 && env.ALLOW_HYBRID_BRIDGE !== 'true') {
     console.warn('SAFETY LOCK: Degen mainnet → Base Sepolia relaying is disabled. Contracts may be verified, but the relayer must remain offline.');
   }
   if (configuredRelayer.toLowerCase() !== relayer.address.toLowerCase()) {
     throw new Error(`RELAYER_ADDRESS (${configuredRelayer}) does not match RELAYER_PRIVATE_KEY (${relayer.address})`);
   }
-  await check(degenClient, degen, 'Degen source', deployer);
+  await check(sourceClient, source, `${source.name} source`, deployer);
   await check(baseClient, base, 'Base destination', deployer);
   const relayerBalance = await baseClient.getBalance({ address: relayer.address });
   console.log(`Base relayer: ${relayer.address}, balance=${formatEther(relayerBalance)} ETH`);

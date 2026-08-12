@@ -29,3 +29,14 @@
     grid-template-columns: minmax(0, 1fr) 100px;
   }
 }
+
+@media (max-width: 900px) {
+  /* A filtered ancestor becomes the containing block for fixed children in
+     Chromium. Disable the header blur on compact layouts so the navigation is
+     correctly anchored to the viewport bottom. */
+  .topbar {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: #080b0b;
+  }
+}

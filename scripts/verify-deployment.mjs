@@ -3,7 +3,7 @@ import { createPublicClient, http } from 'viem';
 import { mirrorAbi, sourceAbi } from '../src/abis.js';
 
 const deployments = JSON.parse(await fs.readFile(new URL('../deployments.json', import.meta.url)));
-const source = createPublicClient({ transport: http(process.env.DEGEN_RPC_URL || 'https://rpc.degen.tips', { retryCount: 5 }) });
+const source = createPublicClient({ transport: http(process.env.SOURCE_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com', { retryCount: 5 }) });
 const destination = createPublicClient({ transport: http(process.env.BASE_RPC_URL || 'https://sepolia.base.org', { retryCount: 5 }) });
 const mirrorChecksAbi = [
   ...mirrorAbi,
@@ -44,4 +44,3 @@ console.log(JSON.stringify({
   destination: { contract: deployments.destination.contract, owner, relayer },
   controlledTest: { mirrorTokenId: mirrorTokenId.toString(), owner: tokenOwner, origin: { bridgeId: origin[0], collection: origin[1], tokenId: origin[2].toString() }, tokenUri }
 }, null, 2));
-
