@@ -1,0 +1,15 @@
+services:
+  relayer:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - bridge-state:/data
+    environment:
+      STATE_FILE: /data/relayer-state.json
+
+volumes:
+  bridge-state:
+

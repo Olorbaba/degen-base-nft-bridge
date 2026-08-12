@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Verified one-way NFT bridge proof from Degen Chain to Base Sepolia.">
+  <title>Degen → Base NFT Bridge</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="glow glow-a"></div><div class="glow glow-b"></div>
+  <nav>
+    <a class="brand" href="#top"><span class="brand-mark">D/B</span><span>Degen Bridge</span></a>
+    <div class="nav-links"><a href="#proof">Proof</a><a href="#architecture">Architecture</a><a id="repo-link" href="#">Source</a></div>
+  </nav>
+
+  <main id="top">
+    <section class="hero">
+      <div class="eyebrow"><span class="pulse"></span> Controlled test completed</div>
+      <h1>One-way NFTs.<br><span>Degen to Base.</span></h1>
+      <p class="lede">A verifiable bridge that permanently locks an ERC-721 on Degen Chain and mints its metadata-preserving mirror to the same holder on Base.</p>
+      <div class="hero-actions">
+        <button id="verify-button">Verify on-chain</button>
+        <a class="secondary" href="#proof">Inspect the proof</a>
+      </div>
+      <p class="safety">Read-only bounty demo · No wallet connection · New deposits disabled</p>
+    </section>
+
+    <section class="network-strip" aria-label="Deployment route">
+      <article><span class="chain-dot degen"></span><div><small>Source</small><strong>Degen Chain</strong><code>666666666</code></div></article>
+      <div class="route"><span></span><b>ONE WAY</b><span></span></div>
+      <article><span class="chain-dot base"></span><div><small>Destination</small><strong>Base Sepolia</strong><code>84532</code></div></article>
+    </section>
+
+    <section id="proof" class="section">
+      <div class="section-heading"><div><span class="kicker">LIVE EVIDENCE</span><h2>One NFT. Fully traceable.</h2></div><div id="verification-status" class="status idle"><span></span>Ready to verify</div></div>
+      <div class="proof-grid">
+        <article class="nft-card">
+          <div class="nft-art"><div class="orb"></div><span>DB</span><small>#1</small></div>
+          <div class="nft-copy"><small>MIRRORED ASSET</small><h3>Degen Bridge Test #1</h3><p>Controlled one-way bridge smoke test.</p><div class="traits"><span>Source <b>Degen Chain</b></span><span>Test <b>Sacrificial</b></span></div></div>
+        </article>
+        <article class="evidence-card">
+          <div class="evidence-row"><span>Bridge ID</span><code id="bridge-id"></code></div>
+          <div class="evidence-row"><span>Original collection</span><a id="source-collection" target="_blank" rel="noreferrer"></a></div>
+          <div class="evidence-row"><span>Original token</span><strong>#1</strong></div>
+          <div class="evidence-row"><span>Mirror token</span><strong>#1</strong></div>
+          <div class="evidence-row"><span>Recipient</span><code id="recipient"></code></div>
+          <div class="tx-links"><a id="source-tx" target="_blank" rel="noreferrer">Source transaction ↗</a><a id="destination-tx" target="_blank" rel="noreferrer">Destination transaction ↗</a></div>
+        </article>
+      </div>
+      <div id="verification-output" class="verification-output" hidden></div>
+    </section>
+
+    <section id="architecture" class="section architecture">
+      <div class="section-heading"><div><span class="kicker">HOW IT WORKS</span><h2>Minimal, auditable design.</h2></div></div>
+      <div class="steps">
+        <article><span>01</span><h3>Lock</h3><p>The holder calls <code>bridge()</code>. The vault snapshots the URI, stores the origin record, and permanently custodies the NFT.</p></article>
+        <article><span>02</span><h3>Observe</h3><p>The centralized relayer waits for confirmations and reads the canonical <code>NFTBridged</code> event.</p></article>
+        <article><span>03</span><h3>Mirror</h3><p>One Base ERC-721 contract mints the exact URI to the original holder with deterministic replay protection.</p></article>
+      </div>
+    </section>
+
+    <section class="section contracts">
+      <div><span class="kicker">DEPLOYED CONTRACTS</span><h2>Public and inspectable.</h2><p>The test route is safety-locked because its source is Degen mainnet and its destination is Base Sepolia. It proves the mechanism without exposing users to an unsafe public bridge.</p></div>
+      <div class="contract-list"><a id="vault-link" target="_blank" rel="noreferrer"><small>DEGEN VAULT</small><code id="vault-address"></code><span>View contract ↗</span></a><a id="mirror-link" target="_blank" rel="noreferrer"><small>BASE MIRROR</small><code id="mirror-address"></code><span>View contract ↗</span></a></div>
+    </section>
+  </main>
+
+  <footer><span>Degen → Base NFT Bridge</span><span>Bounty test release · 2026</span></footer>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
+
