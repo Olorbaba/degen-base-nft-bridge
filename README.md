@@ -77,13 +77,11 @@ The service exposes:
 - `GET /api/transfers`: indexed transfer records.
 - `GET /api/transfers/:id`: one transfer by bridge ID.
 
-A container deployment template with durable state is provided in `compose.example.yml`.
+A container deployment template with durable state is provided in `compose.example.yml` for the future always-on production relayer.
 
-`render.yaml` provides a hosted read-only deployment with persistent state. It intentionally sets `RELAY_ENABLED=false`; enabling production minting additionally requires the destination private key to be stored as a provider secret.
+The controlled-test application and read-only status API are Vercel-compatible. Import this repository into Vercel with the repository root as the project root; `vercel.json` serves the frontend from `docs/` and the serverless endpoints from `api/`. No private key or paid always-on instance is required for this proof release.
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Olorbaba/degen-base-nft-bridge)
-
-The test deployment requires no private key. Render reads `render.yaml`, builds the Docker image, and hosts both the application and `/api/*` endpoints from one HTTPS origin.
+Vercel is intentionally used only for the safety-locked frontend and read-only API. The Base-mainnet minting relayer must run as an always-on process with durable state on Railway, Fly.io, a VPS, or equivalent production infrastructure. Store the relayer key only in that provider's encrypted secrets.
 
 ## User transaction
 
