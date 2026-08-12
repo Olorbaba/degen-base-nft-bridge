@@ -6,3 +6,7 @@ cache
 broadcast
 relayer-state.json*
 relayer-controlled-test-state.json*
+PROJECT_STATUS.local.md
+.tools
+playwright-report
+test-results

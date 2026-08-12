@@ -3,73 +3,121 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Verified one-way NFT bridge proof from Degen Chain to Base Sepolia.">
+  <meta name="description" content="Bridge NFTs one-way from Degen Chain to Base with transparent relayer status and funding.">
   <title>Degen → Base NFT Bridge</title>
+  <link rel="icon" href="assets/degen.ico">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="fixes.css">
 </head>
 <body>
-  <div class="glow glow-a"></div><div class="glow glow-b"></div>
-  <nav>
-    <a class="brand" href="#top"><span class="brand-mark">D/B</span><span>Degen Bridge</span></a>
-    <div class="nav-links"><a href="#proof">Proof</a><a href="#architecture">Architecture</a><a id="repo-link" href="#">Source</a></div>
-  </nav>
+  <header class="topbar">
+    <a class="brand" href="#bridge" data-view-link="bridge" aria-label="Degen to Base bridge home">
+      <span class="brand-route"><img src="assets/degen.ico" alt=""><i></i><img src="assets/base.ico" alt=""></span>
+      <span>Degen Bridge</span>
+    </a>
+    <nav class="primary-nav" aria-label="Primary navigation">
+      <a href="#bridge" data-view-link="bridge" class="active">Bridge</a>
+      <a href="#transfers" data-view-link="transfers">Transfers <span id="nav-queue-count" class="nav-count">0</span></a>
+      <a href="#relayer" data-view-link="relayer">Relayer</a>
+      <a href="#proof" data-view-link="proof">Proof</a>
+    </nav>
+    <div class="header-actions">
+      <span id="api-indicator" class="api-indicator"><i></i><span>Connecting</span></span>
+      <button id="connect-wallet" class="wallet-button"><span class="wallet-dot"></span><span>Connect wallet</span></button>
+    </div>
+  </header>
 
-  <main id="top">
-    <section class="hero">
-      <div class="eyebrow"><span class="pulse"></span> Controlled test completed</div>
-      <h1>One-way NFTs.<br><span>Degen to Base.</span></h1>
-      <p class="lede">A verifiable bridge that permanently locks an ERC-721 on Degen Chain and mints its metadata-preserving mirror to the same holder on Base.</p>
-      <div class="hero-actions">
-        <button id="verify-button">Verify on-chain</button>
-        <a class="secondary" href="#proof">Inspect the proof</a>
+  <main class="app-shell">
+    <div id="safety-banner" class="safety-banner" hidden>
+      <div class="safety-icon">!</div>
+      <div><strong>Bridge transactions are disabled</strong><p id="safety-message"></p></div>
+      <a href="#proof" data-view-link="proof">View verified test</a>
+    </div>
+
+    <section id="view-bridge" class="view active" data-view="bridge">
+      <div class="view-header">
+        <div><p class="eyebrow">ONE-WAY ERC-721 BRIDGE</p><h1>Move an NFT to Base</h1><p>Your original NFT is permanently locked on Degen Chain. A metadata-preserving mirror is minted to the same address on Base.</p></div>
+        <div id="route-state" class="route-state"><span></span><div><small>ROUTE STATUS</small><strong>Loading</strong></div></div>
       </div>
-      <p class="safety">Read-only deployment demo · No wallet connection · New deposits disabled</p>
+
+      <div class="bridge-layout">
+        <section class="bridge-panel">
+          <div class="network-route">
+            <div class="network-box"><img src="assets/degen.ico" alt="Degen Chain"><div><small>FROM</small><strong>Degen Chain</strong><span>DEGEN · <code>666666666</code></span></div></div>
+            <div class="route-arrow" aria-hidden="true">→</div>
+            <div class="network-box"><img src="assets/base.ico" alt="Base"><div><small>TO</small><strong id="destination-network-name">Base</strong><span>ETH · <code id="destination-chain-id">84532</code></span></div></div>
+          </div>
+
+          <form id="nft-form" novalidate>
+            <div class="field-group">
+              <label for="collection-address">NFT contract address</label>
+              <div class="input-shell"><input id="collection-address" name="collection" placeholder="0x…" autocomplete="off" spellcheck="false"><button type="button" class="input-action" id="paste-address" title="Paste contract address">Paste</button></div>
+              <p class="field-help">ERC-721 collection deployed on Degen Chain</p>
+            </div>
+            <div class="field-group token-field">
+              <label for="token-id">Token ID</label>
+              <input id="token-id" name="tokenId" inputmode="numeric" placeholder="e.g. 42" autocomplete="off">
+            </div>
+            <button id="inspect-nft" class="primary-action" type="submit">Inspect NFT</button>
+          </form>
+
+          <div id="nft-preview" class="nft-preview" hidden>
+            <div id="nft-media" class="nft-media"><span>NFT</span></div>
+            <div class="nft-details"><p class="eyebrow">ASSET FOUND</p><h2 id="nft-name">NFT</h2><p id="nft-description"></p><dl><div><dt>Owner</dt><dd id="nft-owner"></dd></div><div><dt>Metadata</dt><dd id="nft-uri-type"></dd></div></dl></div>
+          </div>
+
+          <div class="bridge-steps" aria-label="Bridge transaction steps">
+            <div id="step-inspect" class="bridge-step current"><span>1</span><div><strong>Inspect</strong><small>Verify ownership and metadata</small></div></div>
+            <div id="step-approve" class="bridge-step"><span>2</span><div><strong>Approve</strong><small>Authorize the Degen vault</small></div></div>
+            <div id="step-bridge" class="bridge-step"><span>3</span><div><strong>Bridge</strong><small>Lock NFT and create record</small></div></div>
+          </div>
+          <button id="transaction-action" class="primary-action" hidden disabled>Connect wallet to continue</button>
+          <p id="transaction-note" class="transaction-note"></p>
+        </section>
+
+        <aside class="bridge-sidebar">
+          <section class="side-section"><div class="side-heading"><span>Transfer summary</span><span id="summary-status" class="mini-status">Not started</span></div><dl class="summary-list"><div><dt>Estimated bridge time</dt><dd>~2–5 min</dd></div><div><dt>Destination fee</dt><dd>Paid by relayer</dd></div><div><dt>Metadata</dt><dd>Exact tokenURI</dd></div><div><dt>Direction</dt><dd>One way only</dd></div></dl></section>
+          <section class="side-section warning-section"><span class="warning-mark">!</span><div><strong>Permanent source lock</strong><p>This bridge has no withdrawal path. Confirm the destination network and recipient before signing.</p></div></section>
+          <section class="side-section"><div class="side-heading"><span>Relayer readiness</span><a href="#relayer" data-view-link="relayer">Details</a></div><div class="readiness"><div><span>Base gas</span><strong id="sidebar-base-balance">—</strong></div><div><span>Waiting</span><strong id="sidebar-queue">—</strong></div></div></section>
+        </aside>
+      </div>
     </section>
 
-    <section class="network-strip" aria-label="Deployment route">
-      <article><span class="chain-dot degen"></span><div><small>Source</small><strong>Degen Chain</strong><code>666666666</code></div></article>
-      <div class="route"><span></span><b>ONE WAY</b><span></span></div>
-      <article><span class="chain-dot base"></span><div><small>Destination</small><strong>Base Sepolia</strong><code>84532</code></div></article>
+    <section id="view-transfers" class="view" data-view="transfers">
+      <div class="view-header"><div><p class="eyebrow">TRANSFER ACTIVITY</p><h1>Bridge queue</h1><p>Track every source lock through destination confirmation.</p></div><button id="refresh-transfers" class="secondary-action">Refresh</button></div>
+      <div class="metric-grid"><article><small>WAITING</small><strong id="metric-waiting">0</strong><span>Awaiting relay</span></article><article><small>SUBMITTED</small><strong id="metric-submitted">0</strong><span>Mint transaction sent</span></article><article><small>COMPLETED</small><strong id="metric-completed">0</strong><span>Minted on Base</span></article><article><small>FAILED</small><strong id="metric-failed">0</strong><span>Needs operator review</span></article></div>
+      <div class="table-panel"><div class="table-toolbar"><div class="filter-tabs"><button class="active" data-transfer-filter="all">All</button><button data-transfer-filter="waiting">Waiting</button><button data-transfer-filter="completed">Completed</button><button data-transfer-filter="error">Failed</button></div><span id="transfer-updated">Not yet updated</span></div><div class="transfer-table-wrap"><table class="transfer-table"><thead><tr><th>NFT</th><th>Holder</th><th>Source</th><th>Status</th><th>Destination</th></tr></thead><tbody id="transfer-table-body"></tbody></table><div id="transfer-empty" class="empty-state" hidden>No transfers match this filter.</div></div></div>
     </section>
 
-    <section id="proof" class="section">
-      <div class="section-heading"><div><span class="kicker">LIVE EVIDENCE</span><h2>One NFT. Fully traceable.</h2></div><div id="verification-status" class="status idle"><span></span>Ready to verify</div></div>
+    <section id="view-relayer" class="view" data-view="relayer">
+      <div class="view-header"><div><p class="eyebrow">PUBLIC RELAYER</p><h1>Gas and operations</h1><p>The community can monitor and fund the relayer without granting it additional permissions.</p></div><a id="relayer-explorer-link" class="secondary-action" target="_blank" rel="noreferrer">View address</a></div>
+      <div class="relayer-overview">
+        <section class="relayer-identity"><small>RELAYER ADDRESS</small><div><code id="relayer-address">—</code><button id="copy-relayer" title="Copy relayer address">Copy</button></div><p>The relayer only spends destination gas to mint mirrored NFTs. DEGEN balance is shown for transparency.</p></section>
+        <section class="queue-card"><small>NFTS WAITING</small><strong id="relayer-waiting">0</strong><span id="relayer-runtime">Status unavailable</span></section>
+      </div>
+      <div class="funding-grid">
+        <article class="fund-card"><div class="fund-network"><img src="assets/base.ico" alt="Base"><div><small id="base-fund-network">BASE</small><strong>ETH gas balance</strong></div></div><div class="balance-value"><strong id="base-balance">—</strong><span>ETH</span></div><div class="balance-bar"><i id="base-balance-bar"></i></div><form class="fund-form" data-chain="base"><label for="base-topup">Top up relayer</label><div><input id="base-topup" inputmode="decimal" placeholder="0.01"><button type="submit">Send ETH</button></div></form></article>
+        <article class="fund-card"><div class="fund-network"><img src="assets/degen.ico" alt="Degen Chain"><div><small>DEGEN CHAIN</small><strong>DEGEN balance</strong></div></div><div class="balance-value"><strong id="degen-balance">—</strong><span>DEGEN</span></div><div class="balance-bar degen-bar"><i id="degen-balance-bar"></i></div><form class="fund-form" data-chain="degen"><label for="degen-topup">Top up relayer</label><div><input id="degen-topup" inputmode="decimal" placeholder="100"><button type="submit">Send DEGEN</button></div></form></article>
+      </div>
+      <section class="operations-panel"><div><small>LAST SUCCESSFUL POLL</small><strong id="last-poll">—</strong></div><div><small>SOURCE CHECKPOINT</small><strong id="source-checkpoint">—</strong></div><div><small>SOURCE BLOCK</small><strong id="source-block">—</strong></div><div><small>DESTINATION BLOCK</small><strong id="destination-block">—</strong></div></section>
+    </section>
+
+    <section id="view-proof" class="view" data-view="proof">
+      <div class="view-header"><div><p class="eyebrow">DEPLOYMENT EVIDENCE</p><h1>Verified bridge proof</h1><p>A purpose-built valueless NFT completed the full Degen Chain → Base Sepolia route.</p></div><button id="verify-button" class="primary-action compact">Verify on-chain</button></div>
       <div class="proof-grid">
-        <article class="nft-card">
-          <div class="nft-art"><div class="orb"></div><span>DB</span><small>#1</small></div>
-          <div class="nft-copy"><small>MIRRORED ASSET</small><h3>Degen Bridge Test #1</h3><p>Controlled one-way bridge smoke test.</p><div class="traits"><span>Source <b>Degen Chain</b></span><span>Test <b>Sacrificial</b></span></div></div>
-        </article>
-        <article class="evidence-card">
-          <div class="evidence-row"><span>Bridge ID</span><code id="bridge-id"></code></div>
-          <div class="evidence-row"><span>Original collection</span><a id="source-collection" target="_blank" rel="noreferrer"></a></div>
-          <div class="evidence-row"><span>Original token</span><strong>#1</strong></div>
-          <div class="evidence-row"><span>Mirror token</span><strong>#1</strong></div>
-          <div class="evidence-row"><span>Recipient</span><code id="recipient"></code></div>
-          <div class="tx-links"><a id="source-tx" target="_blank" rel="noreferrer">Source transaction ↗</a><a id="destination-tx" target="_blank" rel="noreferrer">Destination transaction ↗</a></div>
-        </article>
+        <article class="proof-nft"><div class="proof-art"><span>DB</span><small>#1</small></div><div><small>MIRRORED ASSET</small><h2>Degen Bridge Test #1</h2><p>Controlled one-way bridge smoke test with inline data URI metadata.</p></div></article>
+        <article class="evidence-card"><div><span>Bridge ID</span><code id="bridge-id"></code></div><div><span>Original collection</span><a id="source-collection" target="_blank" rel="noreferrer"></a></div><div><span>Original token</span><strong>#1</strong></div><div><span>Mirror token</span><strong>#1</strong></div><div><span>Recipient</span><code id="recipient"></code></div><footer><a id="source-tx" target="_blank" rel="noreferrer">Degen transaction</a><a id="destination-tx" target="_blank" rel="noreferrer">Base transaction</a></footer></article>
       </div>
       <div id="verification-output" class="verification-output" hidden></div>
-    </section>
-
-    <section id="architecture" class="section architecture">
-      <div class="section-heading"><div><span class="kicker">HOW IT WORKS</span><h2>Minimal, auditable design.</h2></div></div>
-      <div class="steps">
-        <article><span>01</span><h3>Lock</h3><p>The holder calls <code>bridge()</code>. The vault snapshots the URI, stores the origin record, and permanently custodies the NFT.</p></article>
-        <article><span>02</span><h3>Observe</h3><p>The centralized relayer waits for confirmations and reads the canonical <code>NFTBridged</code> event.</p></article>
-        <article><span>03</span><h3>Mirror</h3><p>One Base ERC-721 contract mints the exact URI to the original holder with deterministic replay protection.</p></article>
-      </div>
-    </section>
-
-    <section class="section contracts">
-      <div><span class="kicker">DEPLOYED CONTRACTS</span><h2>Public and inspectable.</h2><p>The test route is safety-locked because its source is Degen mainnet and its destination is Base Sepolia. It proves the mechanism without exposing users to an unsafe public bridge.</p></div>
-      <div class="contract-list"><a id="vault-link" target="_blank" rel="noreferrer"><small>DEGEN VAULT</small><code id="vault-address"></code><span>View contract ↗</span></a><a id="mirror-link" target="_blank" rel="noreferrer"><small>BASE MIRROR</small><code id="mirror-address"></code><span>View contract ↗</span></a></div>
+      <div class="architecture-strip"><article><span>01</span><strong>Lock</strong><p>Vault stores collection, token ID, holder, timestamp, and full tokenURI.</p></article><article><span>02</span><strong>Observe</strong><p>Relayer indexes finalized source events with durable replay-safe state.</p></article><article><span>03</span><strong>Mint</strong><p>One Base ERC-721 mints the exact metadata to the original holder.</p></article></div>
     </section>
   </main>
 
-  <footer><span>Degen → Base NFT Bridge</span><span>Controlled test release · 2026</span></footer>
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+  <script src="config.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

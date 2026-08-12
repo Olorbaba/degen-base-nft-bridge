@@ -56,12 +56,13 @@ contract BridgeTest {
     function testMirrorMintsOnceWithMetadata() external {
         BaseNftMirror mirror = new BaseNftMirror(address(this), address(this));
         bytes32 id = keccak256("source deposit");
+        string memory longDataUri =
+            "data:application/json;base64,eyJuYW1lIjogIk5pZ2h0IG91dCB3aXRoIGEgRGVnZW4gIzEiLCAiaW1hZ2UiOiAiYXI6Ly8xakFEbkxRUXpNZ2lKNVVIVUs2OHVNMEw0YlE2aHdmVFhOay10aU5Gc0s0P2ltZyIsICJleHRlcm5hbF91cmwiOiAiIiwgImFuaW1hdGlvbl91cmwiOiAiIiwgImF1ZGlvX3VybCI6ICIiLCAieW91dHViZV91cmwiOiAiIiwgImRlc2NyaXB0aW9uIjogIkRlZ2VucyBwYXJ0eWluZyBkdXJpbmcgRVRIIFdhcnNhdyAyMDI1In0=";
         uint256 tokenId =
-            mirror.mintFromDegen(id, address(0xBEEF), address(0xCAFE), 99, "ipfs://metadata");
+            mirror.mintFromDegen(id, address(0xBEEF), address(0xCAFE), 99, longDataUri);
         require(mirror.ownerOf(tokenId) == address(0xBEEF), "wrong recipient");
         require(
-            keccak256(bytes(mirror.tokenURI(tokenId))) == keccak256(bytes("ipfs://metadata")),
-            "wrong URI"
+            keccak256(bytes(mirror.tokenURI(tokenId))) == keccak256(bytes(longDataUri)), "wrong URI"
         );
         (bool ok,) = address(mirror)
             .call(

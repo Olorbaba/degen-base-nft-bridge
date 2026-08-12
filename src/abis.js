@@ -11,7 +11,8 @@ export const sourceAbi = [
   { type: 'function', name: 'depositAt', stateMutability: 'view', inputs: [{ name: 'index', type: 'uint256' }], outputs: [{ name: 'deposit', type: 'tuple', components: [
     { name: 'id', type: 'bytes32' }, { name: 'collection', type: 'address' }, { name: 'tokenId', type: 'uint256' },
     { name: 'holder', type: 'address' }, { name: 'tokenUri', type: 'string' }, { name: 'timestamp', type: 'uint64' }
-  ] }] }
+  ] }] },
+  { type: 'function', name: 'bridge', stateMutability: 'nonpayable', inputs: [{ name: 'collection', type: 'address' }, { name: 'tokenId', type: 'uint256' }], outputs: [{ name: 'id', type: 'bytes32' }] }
 ];
 
 export const mirrorAbi = [
@@ -23,6 +24,9 @@ export const mirrorAbi = [
 ];
 
 export const erc721MetadataAbi = [
-  { type: 'function', name: 'tokenURI', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'string' }] }
+  { type: 'function', name: 'tokenURI', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'string' }] },
+  { type: 'function', name: 'ownerOf', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'getApproved', stateMutability: 'view', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'isApprovedForAll', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'operator', type: 'address' }], outputs: [{ type: 'bool' }] },
+  { type: 'function', name: 'approve', stateMutability: 'nonpayable', inputs: [{ name: 'to', type: 'address' }, { name: 'tokenId', type: 'uint256' }], outputs: [] }
 ];
-

@@ -5,6 +5,7 @@
 - `DegenNftVault`: one-way ERC-721 custody contract on Degen Chain. It stores collection, token ID, original holder, URI snapshot, timestamp, and bridge ID in an indexed on-chain deposit array.
 - `BaseNftMirror`: one Base ERC-721 collection for every bridged asset. It stores the original Degen collection/token and prevents duplicate minting by bridge ID.
 - Centralized relayer/web server: polls finalized Degen events, re-reads `tokenURI` at the source block, submits the Base mint, persists progress, reconciles pending transactions after restarts, and exposes `/health` and `/transfers`.
+- Full bridge application: wallet/network controls, NFT metadata preview, approval/deposit workflow, transfer queue, relayer balances, community gas top-ups, and deployment proof.
 - Foundry and Node tests, deployment scripts, preflight safety checks, and public deployment evidence.
 
 ## Test deployment

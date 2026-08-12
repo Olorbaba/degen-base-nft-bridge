@@ -9,3 +9,6 @@ relayer-state.json.tmp
 relayer-controlled-test-state.json
 relayer-controlled-test-state.json.tmp
 .DS_Store
+PROJECT_STATUS.local.md
+playwright-report/
+test-results/

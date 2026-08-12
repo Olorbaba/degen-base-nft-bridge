@@ -1,0 +1,47 @@
+services:
+  - type: web
+    name: degen-base-nft-bridge-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8787
+      - key: STATE_FILE
+        value: /tmp/relayer-state.json
+      - key: RELAY_ENABLED
+        value: "false"
+      - key: ALLOW_DEGEN_MAINNET
+        value: "true"
+      - key: ALLOW_HYBRID_BRIDGE
+        value: "false"
+      - key: DEGEN_RPC_URL
+        value: https://rpc.degen.tips
+      - key: DEGEN_CHAIN_ID
+        value: 666666666
+      - key: SOURCE_VAULT_ADDRESS
+        value: 0x7584A721bB18E1531694a0c88D56B55CCB70D06C
+      - key: SOURCE_START_BLOCK
+        value: 26957825
+      - key: SOURCE_CONFIRMATIONS
+        value: 20
+      - key: BASE_RPC_URL
+        value: https://sepolia.base.org
+      - key: BASE_CHAIN_ID
+        value: 84532
+      - key: BASE_MIRROR_ADDRESS
+        value: 0xa0A44dEAD4F124B425DeE4466d542DD612D10517
+      - key: RELAYER_ADDRESS
+        value: 0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D
+      - key: DESTINATION_CONFIRMATIONS
+        value: 10
+      - key: POLL_INTERVAL_MS
+        value: 15000
+      - key: CORS_ORIGIN
+        value: https://olorbaba.github.io
+      - key: PUBLIC_APP_URL
+        value: https://olorbaba.github.io/degen-base-nft-bridge/

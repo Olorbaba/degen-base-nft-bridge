@@ -34,6 +34,15 @@ npm run build
 forge test
 ```
 
+The application includes four operational views:
+
+- **Bridge**: wallet connection, network switching, ERC-721 inspection, metadata preview, approval, and source deposit.
+- **Transfers**: waiting, submitted, completed, and failed bridge records.
+- **Relayer**: live Base ETH and DEGEN balances, queue depth, checkpoints, and native-token top-up forms.
+- **Proof**: independently verifiable controlled deployment evidence.
+
+The current server-provided safety configuration disables approval and bridge transactions for the Degen-mainnet → Base-Sepolia proof route.
+
 Independently verify the live test deployment without a wallet or private key:
 
 ```bash
@@ -62,10 +71,15 @@ npm run relay
 
 The service exposes:
 
-- `GET /health`: current checkpoint and transfer state.
-- `GET /transfers`: indexed transfer records.
+- `GET /healthz`: process health independent of RPC availability.
+- `GET /api/config`: public chain, contract, relayer, and safety configuration.
+- `GET /api/status`: balances, queue metrics, blocks, checkpoints, and runtime state.
+- `GET /api/transfers`: indexed transfer records.
+- `GET /api/transfers/:id`: one transfer by bridge ID.
 
 A container deployment template with durable state is provided in `compose.example.yml`.
+
+`render.yaml` provides a hosted read-only deployment with persistent state. It intentionally sets `RELAY_ENABLED=false`; enabling production minting additionally requires the destination private key to be stored as a provider secret.
 
 ## User transaction
 

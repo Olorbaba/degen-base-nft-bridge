@@ -30,7 +30,7 @@ test('relayer persists a mint and waits for destination confirmations', async ()
     sourceStartBlock: 10n, sourceConfirmations: 0n, destinationConfirmations: 2n,
     sourceVault: `0x${'55'.repeat(20)}`, mirror: `0x${'66'.repeat(20)}`,
     stateFile: path.join(dir, 'state.json'), pollIntervalMs: 60_000,
-    sourceChain: {}, destinationChain: {}, account: {}
+    sourceChain: {}, destinationChain: {}, account: {}, relayEnabled: true
   };
   const relayer = createRelayer(config, { source, destination, wallet });
   const stop = await relayer.start();
@@ -44,4 +44,3 @@ test('relayer persists a mint and waits for destination confirmations', async ()
   assert.equal(writes, 1);
   stop();
 });
-
