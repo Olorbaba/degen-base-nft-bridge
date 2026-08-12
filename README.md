@@ -2,7 +2,7 @@
 
 A centralized, one-way ERC-721 bridge from Degen Chain to Base. The source NFT is permanently locked, and a mirror NFT carrying the same `tokenURI` is minted to the original holder on Base.
 
-> Current release: bounty/test deployment. The controlled cross-chain test passed, but public relaying is intentionally disabled until the Base mainnet deployment after selection. Do not deposit valuable NFTs into the deployed Degen vault.
+> Current release: controlled test deployment. The cross-chain test passed, but public relaying is intentionally disabled until the Base mainnet production deployment. Do not deposit valuable NFTs into the deployed Degen vault.
 
 ## Architecture
 
@@ -14,14 +14,14 @@ A centralized, one-way ERC-721 bridge from Degen Chain to Base. The source NFT i
 
 Universal ERC-721 burning is impossible because standard NFT collections do not expose a common third-party burn function. A non-withdrawable vault provides the requested irreversible, one-way behavior for arbitrary ERC-721 collections.
 
-## Bounty deployment
+## Test deployment
 
 | Component | Network | Address |
 | --- | --- | --- |
 | Source vault | Degen Chain | `0x7584A721bB18E1531694a0c88D56B55CCB70D06C` |
 | Destination mirror | Base Sepolia | `0xa0A44dEAD4F124B425DeE4466d542DD612D10517` |
 
-The controlled test bridged a newly created, valueless Degen NFT to Base Sepolia. See [BOUNTY.md](./BOUNTY.md) for transactions, evaluator instructions, security properties, and the post-selection Base mainnet plan. Machine-readable addresses are in [deployments.json](./deployments.json).
+The controlled test bridged a newly created, valueless Degen NFT to Base Sepolia. See [DEPLOYMENT.md](./DEPLOYMENT.md) for transactions, independent verification instructions, security properties, and the Base mainnet rollout plan. Machine-readable addresses are in [deployments.json](./deployments.json).
 
 ## Install and test
 
@@ -80,4 +80,4 @@ The source transaction is irreversible. Direct safe transfers to the vault are r
 
 Degen's former public testnet is unavailable. The proof deployment therefore used Degen mainnet with a purpose-built worthless NFT and Base Sepolia as the destination. `ALLOW_HYBRID_BRIDGE=false` prevents the server from running this unsafe network pairing publicly.
 
-After bounty selection, deploy `BaseNftMirror` on Base mainnet, switch the destination configuration, complete an independent review, and begin with a capped pilot. See [SECURITY.md](./SECURITY.md).
+For production, deploy `BaseNftMirror` on Base mainnet, switch the destination configuration, complete an independent review, and begin with a capped pilot. See [SECURITY.md](./SECURITY.md).

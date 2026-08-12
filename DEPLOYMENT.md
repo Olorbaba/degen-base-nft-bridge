@@ -1,4 +1,4 @@
-# Bounty submission
+# Deployment and verification
 
 ## What is delivered
 
@@ -47,4 +47,3 @@ npm run verify:deployment
 3. Configure Degen mainnet → Base mainnet, reset the source start block to the vault deployment block, and run the relayer on durable infrastructure.
 4. Add monitoring, durable database storage, metadata pinning, and relayer key rotation procedures.
 5. Open the bridge only after an independent contract review and a capped pilot.
-
