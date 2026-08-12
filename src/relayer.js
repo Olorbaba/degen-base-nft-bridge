@@ -95,6 +95,16 @@ export function createRelayer(config, clients = {}) {
     }
   }
 
+  async function hydrateCompletedTransfers() {
+    for (const transfer of Object.values(state.transfers)) {
+      if (transfer.status !== 'completed' || transfer.mirrorTokenId) continue;
+      try {
+        const mirrorTokenId = await destination.readContract({ address: config.mirror, abi: mirrorAbi, functionName: 'tokenIdForBridgeId', args: [transfer.id] });
+        if (mirrorTokenId !== 0n) transfer.mirrorTokenId = mirrorTokenId.toString();
+      } catch { /* enrichment is retried on the next poll */ }
+    }
+  }
+
   async function processTransfer(log) {
     const args = log.args;
     const id = args.id;
@@ -139,6 +149,7 @@ export function createRelayer(config, clients = {}) {
     lastPollAt = new Date().toISOString();
     try {
       await reconcilePending();
+      await hydrateCompletedTransfers();
       const latest = await source.getBlockNumber();
       const finalized = latest > config.sourceConfirmations ? latest - config.sourceConfirmations : 0n;
       let from = BigInt(state.nextBlock);

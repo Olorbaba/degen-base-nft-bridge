@@ -44,3 +44,20 @@ test('relayer persists a mint and waits for destination confirmations', async ()
   assert.equal(writes, 1);
   stop();
 });
+
+test('relayer hydrates a legacy completed transfer with its Base token ID', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bridge-hydrate-'));
+  const stateFile = path.join(dir, 'state.json');
+  await fs.writeFile(stateFile, JSON.stringify({ version: 1, nextBlock: '12', transfers: { [id]: { id, sourceBlock: '10', status: 'completed' } } }));
+  const source = { getBlockNumber: async () => 10n, getLogs: async () => [] };
+  const destination = { readContract: async () => 9n };
+  const config = {
+    sourceStartBlock: 10n, sourceConfirmations: 0n, destinationConfirmations: 2n,
+    sourceVault: `0x${'55'.repeat(20)}`, mirror: `0x${'66'.repeat(20)}`,
+    stateFile, pollIntervalMs: 60_000, sourceChain: {}, destinationChain: {}, relayEnabled: false
+  };
+  const relayer = createRelayer(config, { source, destination });
+  const stop = await relayer.start();
+  assert.equal(relayer.snapshot().transfers[id].mirrorTokenId, '9');
+  stop();
+});
