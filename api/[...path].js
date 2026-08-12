@@ -7,12 +7,10 @@ const DEFAULTS = {
   destinationRpcUrl: 'https://base-sepolia-rpc.publicnode.com',
   sourceChainId: 11155111,
   destinationChainId: 84532,
-  sourceVault: '0xC6a0208aE6FAb9c5Ddfe59700900EBcC6661A8a2',
+  sourceVault: '0x61e9c5A6f1f656806e201857B6c08e7a3c14818a',
   mirror: '0xa0A44dEAD4F124B425DeE4466d542DD612D10517',
   relayer: '0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D',
-  // The clean public proof starts here. An earlier operator-only smoke event is
-  // deliberately excluded from the public evaluation index.
-  sourceStartBlock: 11472899,
+  sourceStartBlock: 11475132,
   destinationStartBlock: 45382400,
   sourceConfirmations: 1,
   destinationConfirmations: 1
@@ -90,6 +88,7 @@ async function indexedTransfers() {
     }
     return {
       id: log.args.id, sourceCollection: log.args.collection, sourceTokenId: log.args.tokenId.toString(), holder: log.args.holder,
+      tokenStandard: Number(log.args.tokenStandard), amount: log.args.amount.toString(),
       tokenUri: log.args.tokenUri, sourceBlock: log.blockNumber.toString(), sourceTxHash: log.transactionHash,
       destinationTxHash: mintLog?.transactionHash || null, destinationBlock: mintLog?.blockNumber?.toString() || null,
       mirrorTokenId: tokenId === 0n ? null : tokenId.toString(), status: tokenId === 0n ? 'discovered' : 'completed'

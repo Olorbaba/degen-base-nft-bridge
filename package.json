@@ -8,6 +8,7 @@
     "preflight": "node scripts/preflight.mjs",
     "addresses": "node scripts/show-addresses.mjs",
     "verify:deployment": "node scripts/verify-deployment.mjs",
+    "test:controlled:1155": "node scripts/controlled-test-1155.mjs",
     "test": "node --test test/*.test.js",
     "build": "forge build"
   },

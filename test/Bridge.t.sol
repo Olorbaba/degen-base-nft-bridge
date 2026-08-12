@@ -9,6 +9,10 @@ contract MockNft {
     mapping(address => mapping(address => bool)) public isApprovedForAll;
     mapping(uint256 => address) public getApproved;
 
+    function supportsInterface(bytes4 id) external pure returns (bool) {
+        return id == 0x80ac58cd;
+    }
+
     function mint(address to, uint256 id) external {
         ownerOf[id] = to;
     }
@@ -36,6 +40,31 @@ contract MockNft {
             )
         );
         require(ok, "receiver rejected");
+    }
+}
+
+contract Mock1155 {
+    mapping(address => mapping(uint256 => uint256)) public balanceOf;
+    mapping(address => mapping(address => bool)) public isApprovedForAll;
+    mapping(uint256 => string) public uris;
+
+    function supportsInterface(bytes4 id) external pure returns (bool) {
+        return id == 0xd9b67a26;
+    }
+
+    function mint(address to, uint256 id, uint256 amount) external { balanceOf[to][id] += amount; }
+    function setApprovalForAll(address operator, bool approved) external { isApprovedForAll[msg.sender][operator] = approved; }
+    function uri(uint256 id) external view returns (string memory) { return uris[id]; }
+
+    function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes calldata data) external {
+        require(from == msg.sender || isApprovedForAll[from][msg.sender], "not approved");
+        require(balanceOf[from][id] >= amount, "insufficient");
+        balanceOf[from][id] -= amount;
+        balanceOf[to][id] += amount;
+        (bool ok, bytes memory result) = to.call(abi.encodeWithSignature(
+            "onERC1155Received(address,address,uint256,uint256,bytes)", msg.sender, from, id, amount, data
+        ));
+        require(ok && bytes4(result) == bytes4(keccak256("onERC1155Received(address,address,uint256,uint256,bytes)")), "receiver rejected");
     }
 }
 
@@ -89,6 +118,31 @@ contract BridgeTest {
                 )
             );
         require(!ok, "unsolicited transfer accepted");
+        require(vault.depositCount() == 0, "unsolicited record created");
+    }
+
+    function testVaultSupportsErc1155() external {
+        DegenNftVault vault = new DegenNftVault();
+        Mock1155 nft = new Mock1155();
+        nft.mint(address(this), 9, 4);
+        nft.setApprovalForAll(address(vault), true);
+        bytes32 id = vault.bridge(address(nft), 9);
+        require(nft.balanceOf(address(this), 9) == 3, "wrong source balance");
+        require(nft.balanceOf(address(vault), 9) == 1, "wrong vault balance");
+        DegenNftVault.Deposit memory deposit = vault.depositAt(0);
+        require(deposit.id == id, "wrong id");
+        require(deposit.tokenStandard == vault.TOKEN_STANDARD_ERC1155(), "wrong standard");
+        require(deposit.amount == 1, "wrong amount");
+    }
+
+    function testVaultRejectsUnsolicitedErc1155Transfer() external {
+        DegenNftVault vault = new DegenNftVault();
+        Mock1155 nft = new Mock1155();
+        nft.mint(address(this), 10, 1);
+        (bool ok,) = address(nft).call(abi.encodeWithSignature(
+            "safeTransferFrom(address,address,uint256,uint256,bytes)", address(this), address(vault), 10, 1, ""
+        ));
+        require(!ok, "unsolicited ERC1155 transfer accepted");
         require(vault.depositCount() == 0, "unsolicited record created");
     }
 }

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createPublicClient, createWalletClient, defineChain, fallback, formatEther, http as viemHttp, parseAbiItem } from 'viem';
-import { sourceAbi, mirrorAbi, erc721MetadataAbi } from './abis.js';
+import { sourceAbi, mirrorAbi, erc721MetadataAbi, erc1155MetadataAbi } from './abis.js';
 import { loadState, saveState } from './state.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -66,7 +66,7 @@ export function readConfig(env = process.env) {
   };
 }
 
-const bridgeEvent = parseAbiItem('event NFTBridged(bytes32 indexed id,address indexed collection,uint256 indexed tokenId,address holder,string tokenUri,uint256 timestamp)');
+const bridgeEvent = parseAbiItem('event NFTBridged(bytes32 indexed id,address indexed collection,uint256 indexed tokenId,address holder,uint8 tokenStandard,uint256 amount,string tokenUri,uint256 timestamp)');
 
 export function createRpcTransport(urls, transportFactory = viemHttp) {
   return fallback(urls.map((url, index) => transportFactory(url, {
@@ -136,6 +136,8 @@ export function createRelayer(config, clients = {}) {
       sourceCollection: args.collection,
       sourceTokenId: args.tokenId.toString(),
       holder: args.holder,
+      tokenStandard: Number(args.tokenStandard),
+      amount: args.amount.toString(),
       sourceBlock: log.blockNumber.toString(),
       sourceTxHash: log.transactionHash,
       status: 'discovered',
@@ -145,7 +147,9 @@ export function createRelayer(config, clients = {}) {
     if (transfer.status === 'submitted') return;
     let uri = args.tokenUri;
     try {
-      uri = await source.readContract({ address: args.collection, abi: erc721MetadataAbi, functionName: 'tokenURI', args: [args.tokenId], blockNumber: log.blockNumber });
+      const metadataAbi = Number(args.tokenStandard) === 2 ? erc1155MetadataAbi : erc721MetadataAbi;
+      const metadataFunction = Number(args.tokenStandard) === 2 ? 'uri' : 'tokenURI';
+      uri = await source.readContract({ address: args.collection, abi: metadataAbi, functionName: metadataFunction, args: [args.tokenId], blockNumber: log.blockNumber });
     } catch { /* use the vault's event snapshot */ }
     transfer.tokenUri = uri;
 

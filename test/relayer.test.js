@@ -13,7 +13,7 @@ const txHash = `0x${'44'.repeat(32)}`;
 test('relayer persists a mint and waits for destination confirmations', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bridge-relayer-'));
   let destinationBlock = 50n;
-  const log = { blockNumber: 10n, transactionHash: txHash, args: { id, collection, tokenId: 7n, holder, tokenUri: 'ipfs://snapshot', timestamp: 1n } };
+  const log = { blockNumber: 10n, transactionHash: txHash, args: { id, collection, tokenId: 7n, holder, tokenStandard: 2, amount: 1n, tokenUri: 'ipfs://snapshot', timestamp: 1n } };
   const source = {
     getBlockNumber: async () => 10n,
     getLogs: async () => [log],
@@ -36,6 +36,9 @@ test('relayer persists a mint and waits for destination confirmations', async ()
   const stop = await relayer.start();
   assert.equal(writes, 1);
   assert.equal(relayer.snapshot().transfers[id].status, 'submitted');
+  assert.equal(relayer.snapshot().transfers[id].tokenStandard, 2);
+  assert.equal(relayer.snapshot().transfers[id].amount, '1');
+  assert.equal(relayer.snapshot().transfers[id].tokenUri, 'ipfs://chain-read');
   await relayer.poll();
   assert.equal(relayer.snapshot().transfers[id].status, 'submitted');
   destinationBlock = 51n;

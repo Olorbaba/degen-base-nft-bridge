@@ -55,7 +55,7 @@
             <div class="field-group">
               <label for="collection-address">NFT contract address</label>
               <div class="input-shell"><input id="collection-address" name="collection" placeholder="0x…" autocomplete="off" spellcheck="false"><button type="button" class="input-action" id="paste-address" title="Paste contract address">Paste</button></div>
-              <p class="field-help">ERC-721 collection deployed on Ethereum Sepolia</p>
+              <p class="field-help">ERC-721 or ERC-1155 collection deployed on Ethereum Sepolia</p>
             </div>
             <div class="field-group token-field">
               <label for="token-id">Token ID</label>
@@ -79,7 +79,7 @@
         </section>
 
         <aside class="bridge-sidebar">
-          <section class="side-section"><div class="side-heading"><span>Transfer summary</span><span id="summary-status" class="mini-status">Not started</span></div><dl class="summary-list"><div><dt>Estimated bridge time</dt><dd>~2–5 min</dd></div><div><dt>Destination fee</dt><dd>Paid by relayer</dd></div><div><dt>Metadata</dt><dd>Exact tokenURI</dd></div><div><dt>Direction</dt><dd>One way only</dd></div></dl></section>
+          <section class="side-section"><div class="side-heading"><span>Transfer summary</span><span id="summary-status" class="mini-status">Not started</span></div><dl class="summary-list"><div><dt>Estimated bridge time</dt><dd>~2–5 min</dd></div><div><dt>Destination fee</dt><dd>Paid by relayer</dd></div><div><dt>Metadata</dt><dd>Exact URI</dd></div><div><dt>Direction</dt><dd>One way only</dd></div></dl></section>
           <section class="side-section warning-section"><span class="warning-mark">!</span><div><strong>Permanent source lock</strong><p>This bridge has no withdrawal path. Confirm the destination network and recipient before signing.</p></div></section>
           <section class="side-section"><div class="side-heading"><span>Relayer readiness</span><a href="#relayer" data-view-link="relayer">Details</a></div><div class="readiness"><div><span>Base gas</span><strong id="sidebar-base-balance">—</strong></div><div><span>Waiting</span><strong id="sidebar-queue">—</strong></div></div></section>
         </aside>
@@ -106,13 +106,13 @@
     </section>
 
     <section id="view-proof" class="view" data-view="proof">
-      <div class="view-header"><div><p class="eyebrow">DEPLOYMENT EVIDENCE</p><h1>Verified bridge proof</h1><p>A purpose-built valueless NFT completed the full Ethereum Sepolia → Base Sepolia route.</p></div><button id="verify-button" class="primary-action compact">Verify on-chain</button></div>
+      <div class="view-header"><div><p class="eyebrow">DEPLOYMENT EVIDENCE</p><h1>Verified bridge proof</h1><p>Controlled ERC-721 and ERC-1155 assets completed the full Ethereum Sepolia → Base Sepolia route.</p></div><button id="verify-button" class="primary-action compact">Verify on-chain</button></div>
       <div class="proof-grid">
-        <article class="proof-nft"><div class="proof-art"><span>SB</span><small>#3</small></div><div><small>MIRRORED ASSET</small><h2>Sepolia Bridge Test #1</h2><p>Controlled one-way bridge smoke test with inline data URI metadata.</p></div></article>
-        <article class="evidence-card"><div><span>Bridge ID</span><code id="bridge-id"></code></div><div><span>Original collection</span><a id="source-collection" target="_blank" rel="noreferrer"></a></div><div><span>Original token</span><strong>#1</strong></div><div><span>Mirror token</span><strong>#3</strong></div><div><span>Recipient</span><code id="recipient"></code></div><footer><a id="source-tx" target="_blank" rel="noreferrer">Sepolia transaction</a><a id="destination-tx" target="_blank" rel="noreferrer">Base transaction</a></footer></article>
+        <article class="proof-nft"><div class="proof-art"><span>1155</span><small>#5</small></div><div><small>MIRRORED ERC-1155 ASSET</small><h2>Sepolia ERC-1155 Test #1</h2><p>Controlled one-way bridge proof using balanceOf, uri, and setApprovalForAll.</p></div></article>
+        <article class="evidence-card"><div><span>Bridge ID</span><code id="bridge-id"></code></div><div><span>Original collection</span><a id="source-collection" target="_blank" rel="noreferrer"></a></div><div><span>Standard / amount</span><strong>ERC-1155 / 1</strong></div><div><span>Original token</span><strong>#1</strong></div><div><span>Mirror token</span><strong>#5</strong></div><div><span>Recipient</span><code id="recipient"></code></div><footer><a id="source-tx" target="_blank" rel="noreferrer">Sepolia transaction</a><a id="destination-tx" target="_blank" rel="noreferrer">Base transaction</a></footer></article>
       </div>
       <div id="verification-output" class="verification-output" hidden></div>
-      <div class="architecture-strip"><article><span>01</span><strong>Lock</strong><p>Vault stores collection, token ID, holder, timestamp, and full tokenURI.</p></article><article><span>02</span><strong>Observe</strong><p>Relayer indexes finalized source events with durable replay-safe state.</p></article><article><span>03</span><strong>Mint</strong><p>One Base ERC-721 mints the exact metadata to the original holder.</p></article></div>
+      <div class="architecture-strip"><article><span>01</span><strong>Detect</strong><p>The vault identifies exactly one supported standard: ERC-721 or ERC-1155.</p></article><article><span>02</span><strong>Lock</strong><p>It stores collection, token ID, holder, standard, amount, timestamp, and URI.</p></article><article><span>03</span><strong>Mint</strong><p>The relayer mints one Base ERC-721 mirror with the exact metadata.</p></article></div>
     </section>
   </main>
 

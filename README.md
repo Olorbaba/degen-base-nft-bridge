@@ -1,6 +1,6 @@
 # Degen → Base one-way NFT bridge
 
-A centralized, one-way ERC-721 bridge designed for Degen Chain → Base. The public evaluation release uses Ethereum Sepolia → Base Sepolia so judges can safely test the complete workflow with valueless NFTs.
+A centralized, one-way ERC-721/ERC-1155 bridge designed for Degen Chain → Base. The public evaluation release uses Ethereum Sepolia → Base Sepolia so judges can safely test the complete workflow with valueless NFTs.
 
 > Current release: public two-testnet deployment. Use test NFTs only; the source lock remains permanent by design.
 
@@ -10,20 +10,20 @@ Live application and read-only status API: **https://degen-base-nft-bridge.verce
 
 1. A holder approves `DegenNftVault` and calls `bridge(collection, tokenId)`.
 2. The vault permanently custodies the NFT, snapshots its URI, appends its details to an on-chain array, and emits `NFTBridged`.
-3. The relayer waits for source confirmations and reads the event plus `tokenURI` at the finalized source block.
+3. The relayer waits for source confirmations and reads the event plus `tokenURI` (ERC-721) or `uri` (ERC-1155) at the finalized source block.
 4. The relayer calls `BaseNftMirror.mintFromDegen`, minting the URI to the original holder.
 5. The Base contract records the Degen origin and rejects duplicate bridge IDs.
 
-Universal ERC-721 burning is impossible because standard NFT collections do not expose a common third-party burn function. A non-withdrawable vault provides the requested irreversible, one-way behavior for arbitrary ERC-721 collections.
+Universal NFT burning is impossible because standard ERC-721 and ERC-1155 collections do not expose a common third-party burn function. A non-withdrawable vault provides the requested irreversible, one-way behavior for both standards.
 
 ## Test deployment
 
 | Component | Network | Address |
 | --- | --- | --- |
-| Source vault | Ethereum Sepolia | `0xC6a0208aE6FAb9c5Ddfe59700900EBcC6661A8a2` |
+| Source vault | Ethereum Sepolia | `0x61e9c5A6f1f656806e201857B6c08e7a3c14818a` |
 | Destination mirror | Base Sepolia | `0xa0A44dEAD4F124B425DeE4466d542DD612D10517` |
 
-The controlled test bridged a newly created, valueless Ethereum Sepolia NFT to Base Sepolia. See [DEPLOYMENT.md](./DEPLOYMENT.md) for transactions, independent verification instructions, security properties, and the Base mainnet rollout plan. Machine-readable addresses are in [deployments.json](./deployments.json).
+Controlled tests bridged newly created, valueless ERC-721 and ERC-1155 assets to Base Sepolia. The active proof uses the upgraded dual-standard vault and verifies exact ERC-1155 URI preservation. See [DEPLOYMENT.md](./DEPLOYMENT.md) for transactions, independent verification instructions, security properties, and the Base mainnet rollout plan. Machine-readable addresses are in [deployments.json](./deployments.json).
 
 ## Install and test
 
@@ -38,7 +38,7 @@ forge test
 
 The application includes four operational views:
 
-- **Bridge**: wallet connection, network switching, ERC-721 inspection, metadata preview, approval, and source deposit.
+- **Bridge**: wallet connection, network switching, ERC-721/ERC-1155 inspection, metadata preview, approval, and source deposit.
 - **Transfers**: waiting, submitted, completed, and failed bridge records.
 - **Relayer**: live source and Base Sepolia ETH balances, queue depth, checkpoints, and native-token top-up forms.
 - **Proof**: independently verifiable controlled deployment evidence.
@@ -60,7 +60,7 @@ Copy `.env.example` to `.env`. Use a dedicated deployer, a low-balance relayer k
 Important variables:
 
 - `SOURCE_RPC_URL` / `SOURCE_CHAIN_ID`: current source network (Ethereum Sepolia for evaluation; Degen Chain for production).
-- `SOURCE_VAULT_ADDRESS`: deployed source vault.
+- `SOURCE_VAULT_ADDRESS`: deployed source vault. The current ERC-721/ERC-1155 Sepolia vault is `0x61e9c5A6f1f656806e201857B6c08e7a3c14818a`.
 - `SOURCE_START_BLOCK`: vault deployment block.
 - `BASE_MIRROR_ADDRESS`: destination mirror.
 - `BASE_RPC_URLS`: optional comma-separated destination RPC failover list used for rate limits and outages.
@@ -95,6 +95,9 @@ The Base-mainnet relayer must run as an always-on process with durable state on 
 ```solidity
 IERC721(collection).approve(vault, tokenId);
 DegenNftVault(vault).bridge(collection, tokenId);
+
+IERC1155(collection).setApprovalForAll(vault, true);
+DegenNftVault(vault).bridge(collection, tokenId); // locks one unit
 ```
 
 The source transaction is irreversible. Direct safe transfers to the vault are rejected; users must call `bridge` so a canonical record is created.

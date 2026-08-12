@@ -2,9 +2,9 @@
   "source": {
     "network": "Ethereum Sepolia",
     "chainId": 11155111,
-    "contract": "0xC6a0208aE6FAb9c5Ddfe59700900EBcC6661A8a2",
-    "deploymentBlock": 11472779,
-    "transactionHash": "0x950a2bd8c1d22d121138000ffce4ba50619e28f56da4c60553b5a9b747e3869f",
+    "contract": "0x61e9c5A6f1f656806e201857B6c08e7a3c14818a",
+    "deploymentBlock": 11475132,
+    "transactionHash": "0x0e1e253d22ea2d56584303eb385d3654f75dd5fd1400ca43ce70e589cb78d61d",
     "deployer": "0xbFdD3790aBb0768FAe791cf1c551F15Aa7Bb498f"
   },
   "destination": {
@@ -15,7 +15,7 @@
     "owner": "0xbFdD3790aBb0768FAe791cf1c551F15Aa7Bb498f",
     "relayer": "0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D"
   },
-  "controlledTest": {
+  "legacyControlledTest721": {
     "sourceCollection": "0x63eb1893E15c98E866F636A6974B5DA3b44CEdEA",
     "sourceTokenId": 1,
     "sourceMintTransaction": "0xe90e4e275ad67e64484ca992602b5f57738cc1072a1e4d403237e9dd99375c4e",
@@ -24,6 +24,19 @@
     "bridgeId": "0xc46a638002a527d7cf70cd18ee46928c9b585a366ec3b5d915a98b6e9e8cd84b",
     "destinationTransaction": "0x118a89de268719820cca1a414d36382f67dc670fba19d74478c816c45c6d6c14",
     "destinationTokenId": 3,
+    "result": "completed"
+  },
+  "controlledTest1155": {
+    "sourceCollection": "0x15A9268e3c46c8cE2B11a08148bD27db07B71715",
+    "sourceTokenId": 1,
+    "sourceMintTransaction": "0x2c95c8547e2888bcfb668f28ff45ea544aa34d5c684f0b00ce90ddf8d68dd8c8",
+    "sourceApprovalTransaction": "0x0ff7df82e4e46a2a94b62c0fb1296b6ddc939267c73e08a0f1a557f07bbf3571",
+    "sourceBridgeTransaction": "0x57989161079a3fa8526f5dd8da5e8e0bb3e6f82ec042ad8a32aee32ee1dc59d8",
+    "bridgeId": "0x4f3068a25d86478ffd3fa640714861195f9c799e475a7772ea80389da1ec188b",
+    "destinationTransaction": "0x66d3d45c8f2dbac4793d9545346736c7d8e1324f785f18e2217675077c981482",
+    "destinationTokenId": 5,
+    "tokenStandard": "ERC-1155",
+    "amount": 1,
     "result": "completed"
   },
   "status": "public-two-testnet-route-operational"

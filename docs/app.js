@@ -2,21 +2,25 @@ import { createPublicClient, createWalletClient, custom, decodeEventLog, formatE
 
 const API_BASE = window.BRIDGE_API_URL || (location.hostname.endsWith('github.io') ? '' : location.origin);
 const proof = {
-  source: { address: '0xC6a0208aE6FAb9c5Ddfe59700900EBcC6661A8a2', tx: '0xce77a76c2e844dd88cd1125efacc32fb8060f10d2d1de8a7d63a3784dc152e35', rpc: 'https://ethereum-sepolia-rpc.publicnode.com' },
-  destination: { address: '0xa0A44dEAD4F124B425DeE4466d542DD612D10517', tx: '0x118a89de268719820cca1a414d36382f67dc670fba19d74478c816c45c6d6c14', rpc: 'https://base-sepolia-rpc.publicnode.com' },
-  bridgeId: '0xc46a638002a527d7cf70cd18ee46928c9b585a366ec3b5d915a98b6e9e8cd84b',
-  collection: '0x63eb1893E15c98E866F636A6974B5DA3b44CEdEA', recipient: '0xbFdD3790aBb0768FAe791cf1c551F15Aa7Bb498f'
+  source: { address: '0x61e9c5A6f1f656806e201857B6c08e7a3c14818a', tx: '0x57989161079a3fa8526f5dd8da5e8e0bb3e6f82ec042ad8a32aee32ee1dc59d8', rpc: 'https://ethereum-sepolia-rpc.publicnode.com' },
+  destination: { address: '0xa0A44dEAD4F124B425DeE4466d542DD612D10517', tx: '0x66d3d45c8f2dbac4793d9545346736c7d8e1324f785f18e2217675077c981482', rpc: 'https://base-sepolia-rpc.publicnode.com' },
+  bridgeId: '0x4f3068a25d86478ffd3fa640714861195f9c799e475a7772ea80389da1ec188b',
+  collection: '0x15A9268e3c46c8cE2B11a08148bD27db07B71715', recipient: '0xbFdD3790aBb0768FAe791cf1c551F15Aa7Bb498f', standard: 'ERC-1155', sourceTokenId: '1', mirrorTokenId: '5'
 };
 const sourceAbi = [
   { type: 'function', name: 'bridge', stateMutability: 'nonpayable', inputs: [{ name: 'collection', type: 'address' }, { name: 'tokenId', type: 'uint256' }], outputs: [{ name: 'id', type: 'bytes32' }] },
-  { type: 'event', name: 'NFTBridged', inputs: [{ indexed: true, name: 'id', type: 'bytes32' }, { indexed: true, name: 'collection', type: 'address' }, { indexed: true, name: 'tokenId', type: 'uint256' }, { indexed: false, name: 'holder', type: 'address' }, { indexed: false, name: 'tokenUri', type: 'string' }, { indexed: false, name: 'timestamp', type: 'uint256' }] }
+  { type: 'event', name: 'NFTBridged', inputs: [{ indexed: true, name: 'id', type: 'bytes32' }, { indexed: true, name: 'collection', type: 'address' }, { indexed: true, name: 'tokenId', type: 'uint256' }, { indexed: false, name: 'holder', type: 'address' }, { indexed: false, name: 'tokenStandard', type: 'uint8' }, { indexed: false, name: 'amount', type: 'uint256' }, { indexed: false, name: 'tokenUri', type: 'string' }, { indexed: false, name: 'timestamp', type: 'uint256' }] }
 ];
 const nftAbi = [
+  { type: 'function', name: 'supportsInterface', stateMutability: 'view', inputs: [{ type: 'bytes4' }], outputs: [{ type: 'bool' }] },
   { type: 'function', name: 'tokenURI', stateMutability: 'view', inputs: [{ type: 'uint256' }], outputs: [{ type: 'string' }] },
+  { type: 'function', name: 'uri', stateMutability: 'view', inputs: [{ type: 'uint256' }], outputs: [{ type: 'string' }] },
   { type: 'function', name: 'ownerOf', stateMutability: 'view', inputs: [{ type: 'uint256' }], outputs: [{ type: 'address' }] },
+  { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }, { type: 'uint256' }], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'getApproved', stateMutability: 'view', inputs: [{ type: 'uint256' }], outputs: [{ type: 'address' }] },
   { type: 'function', name: 'isApprovedForAll', stateMutability: 'view', inputs: [{ type: 'address' }, { type: 'address' }], outputs: [{ type: 'bool' }] },
-  { type: 'function', name: 'approve', stateMutability: 'nonpayable', inputs: [{ type: 'address' }, { type: 'uint256' }], outputs: [] }
+  { type: 'function', name: 'approve', stateMutability: 'nonpayable', inputs: [{ type: 'address' }, { type: 'uint256' }], outputs: [] },
+  { type: 'function', name: 'setApprovalForAll', stateMutability: 'nonpayable', inputs: [{ type: 'address' }, { type: 'bool' }], outputs: [] }
 ];
 
 const state = { config: null, status: null, transfers: [], account: null, wallet: null, nft: null, filter: 'all', apiOnline: false };
@@ -73,7 +77,7 @@ async function loadStatus(silent = false) {
   } catch (error) {
     if (!silent) toast('Live relayer API is not hosted yet. Showing verified static proof.', 'error');
     state.status = state.status || { queue: { waiting: 0, submitted: 0, completed: 1, failed: 0 }, balances: { degen: '—', eth: '—' }, blocks: {}, runtime: {} };
-    state.transfers = state.transfers.length ? state.transfers : [{ id: proof.bridgeId, sourceCollection: proof.collection, sourceTokenId: '1', holder: proof.recipient, sourceTxHash: proof.source.tx, destinationTxHash: proof.destination.tx, mirrorTokenId: '3', status: 'completed', completedAt: '2026-08-12T11:31:31.991Z' }];
+    state.transfers = state.transfers.length ? state.transfers : [{ id: proof.bridgeId, sourceCollection: proof.collection, sourceTokenId: proof.sourceTokenId, holder: proof.recipient, tokenStandard: 2, amount: '1', sourceTxHash: proof.source.tx, destinationTxHash: proof.destination.tx, mirrorTokenId: proof.mirrorTokenId, status: 'completed', completedAt: '2026-08-12T20:30:00.000Z' }];
   }
   renderStatus(); renderTransfers();
 }
@@ -127,18 +131,40 @@ function parseMetadata(uri) {
 function mediaUrl(uri) { if (!uri) return ''; if (uri.startsWith('ipfs://')) return `https://ipfs.io/ipfs/${uri.slice(7)}`; if (uri.startsWith('ar://')) return `https://arweave.net/${uri.slice(5)}`; return uri; }
 async function inspectNft(event) {
   event.preventDefault(); const collectionValue = $('collection-address').value.trim(); const tokenValue = $('token-id').value.trim();
-  if (!isAddress(collectionValue)) return toast('Enter a valid ERC-721 contract address.', 'error');
+  if (!isAddress(collectionValue)) return toast('Enter a valid ERC-721 or ERC-1155 contract address.', 'error');
   if (!/^\d+$/.test(tokenValue)) return toast('Enter a valid numeric token ID.', 'error');
   const button = $('inspect-nft'); button.disabled = true; button.textContent = 'Inspecting…';
   try {
     const collection = getAddress(collectionValue); const tokenId = BigInt(tokenValue); const client = createPublicClient({ transport: http(state.config.source.rpcUrl, { retryCount: 3 }) });
-    const [owner, tokenUri] = await Promise.all([client.readContract({ address: collection, abi: nftAbi, functionName: 'ownerOf', args: [tokenId] }), client.readContract({ address: collection, abi: nftAbi, functionName: 'tokenURI', args: [tokenId] })]);
-    const [approvedAddress, approvedForAll] = await Promise.all([
-      client.readContract({ address: collection, abi: nftAbi, functionName: 'getApproved', args: [tokenId] }).catch(() => null),
-      client.readContract({ address: collection, abi: nftAbi, functionName: 'isApprovedForAll', args: [owner, state.config.source.vault] }).catch(() => false)
+    const [is721, is1155] = await Promise.all([
+      client.readContract({ address: collection, abi: nftAbi, functionName: 'supportsInterface', args: ['0x80ac58cd'] }).catch(() => false),
+      client.readContract({ address: collection, abi: nftAbi, functionName: 'supportsInterface', args: ['0xd9b67a26'] }).catch(() => false)
     ]);
-    const metadata = parseMetadata(tokenUri); const approved = approvedForAll || approvedAddress?.toLowerCase() === state.config.source.vault.toLowerCase(); state.nft = { collection, tokenId, owner: getAddress(owner), tokenUri, metadata, approved };
-    $('nft-name').textContent = metadata.name || `Token #${tokenId}`; $('nft-description').textContent = metadata.description || 'No description supplied.'; $('nft-owner').textContent = short(owner); $('nft-owner').title = owner; $('nft-uri-type').textContent = metadata.type;
+    if (is721 === is1155) throw new Error('Collection must implement exactly one supported standard: ERC-721 or ERC-1155.');
+    let owner; let tokenUri; let approved; let standard; let amount = 1n;
+    if (is721) {
+      standard = 'ERC-721';
+      [owner, tokenUri] = await Promise.all([
+        client.readContract({ address: collection, abi: nftAbi, functionName: 'ownerOf', args: [tokenId] }),
+        client.readContract({ address: collection, abi: nftAbi, functionName: 'tokenURI', args: [tokenId] })
+      ]);
+      const [approvedAddress, approvedForAll] = await Promise.all([
+        client.readContract({ address: collection, abi: nftAbi, functionName: 'getApproved', args: [tokenId] }).catch(() => null),
+        client.readContract({ address: collection, abi: nftAbi, functionName: 'isApprovedForAll', args: [owner, state.config.source.vault] }).catch(() => false)
+      ]);
+      approved = approvedForAll || approvedAddress?.toLowerCase() === state.config.source.vault.toLowerCase();
+    } else {
+      standard = 'ERC-1155'; owner = state.account;
+      if (!owner) throw new Error('Connect the wallet that holds this ERC-1155 token before inspecting it.');
+      [amount, tokenUri, approved] = await Promise.all([
+        client.readContract({ address: collection, abi: nftAbi, functionName: 'balanceOf', args: [owner, tokenId] }),
+        client.readContract({ address: collection, abi: nftAbi, functionName: 'uri', args: [tokenId] }),
+        client.readContract({ address: collection, abi: nftAbi, functionName: 'isApprovedForAll', args: [owner, state.config.source.vault] })
+      ]);
+      if (amount < 1n) throw new Error('Connected wallet has no balance for this ERC-1155 token ID.');
+    }
+    const metadata = parseMetadata(tokenUri); state.nft = { collection, tokenId, owner: getAddress(owner), tokenUri, metadata, approved, standard, amount };
+    $('nft-name').textContent = metadata.name || `Token #${tokenId}`; $('nft-description').textContent = metadata.description || 'No description supplied.'; $('nft-owner').textContent = short(owner); $('nft-owner').title = owner; $('nft-uri-type').textContent = `${standard} · ${metadata.type}`;
     const media = $('nft-media'); media.innerHTML = '<span>NFT</span>'; if (metadata.image) { const image = document.createElement('img'); image.src = mediaUrl(metadata.image); image.alt = metadata.name || 'NFT preview'; image.onerror = () => image.remove(); media.append(image); }
     $('nft-preview').hidden = false; $('step-inspect').classList.add('complete'); $('step-inspect').classList.remove('current'); $('step-approve').classList.toggle('complete', approved); $('step-approve').classList.toggle('current', !approved); $('step-bridge').classList.toggle('current', approved); updateTransactionAction();
   } catch (error) { state.nft = null; toast(error.shortMessage || 'Unable to read this NFT on Ethereum Sepolia.', 'error'); }
@@ -160,7 +186,7 @@ async function transactionAction() {
   await requireSafeRoute(); await switchChain(state.config.source); const button = $('transaction-action'); button.disabled = true;
   try {
     if (action === 'approve') {
-      button.textContent = 'Confirm approval in wallet…'; const sourceWallet = createWalletClient({ account: state.account, chain: { id: state.config.source.chainId, name: state.config.source.name, nativeCurrency: { name: 'Ether', symbol: state.config.source.currency, decimals: 18 }, rpcUrls: { default: { http: [state.config.source.rpcUrl] } } }, transport: custom(window.ethereum) }); const hash = await sourceWallet.writeContract({ account: state.account, chain: sourceWallet.chain, address: state.nft.collection, abi: nftAbi, functionName: 'approve', args: [state.config.source.vault, state.nft.tokenId] });
+      button.textContent = 'Confirm approval in wallet…'; const sourceWallet = createWalletClient({ account: state.account, chain: { id: state.config.source.chainId, name: state.config.source.name, nativeCurrency: { name: 'Ether', symbol: state.config.source.currency, decimals: 18 }, rpcUrls: { default: { http: [state.config.source.rpcUrl] } } }, transport: custom(window.ethereum) }); const hash = await sourceWallet.writeContract({ account: state.account, chain: sourceWallet.chain, address: state.nft.collection, abi: nftAbi, functionName: state.nft.standard === 'ERC-1155' ? 'setApprovalForAll' : 'approve', args: state.nft.standard === 'ERC-1155' ? [state.config.source.vault, true] : [state.config.source.vault, state.nft.tokenId] });
       const client = createPublicClient({ transport: http(state.config.source.rpcUrl) }); await client.waitForTransactionReceipt({ hash }); state.nft.approved = true; $('step-approve').classList.add('complete'); $('step-approve').classList.remove('current'); $('step-bridge').classList.add('current'); toast('Vault approval confirmed', 'success');
     } else {
       button.textContent = 'Confirm permanent lock…'; const sourceWallet = createWalletClient({ account: state.account, chain: { id: state.config.source.chainId, name: state.config.source.name, nativeCurrency: { name: 'Ether', symbol: state.config.source.currency, decimals: 18 }, rpcUrls: { default: { http: [state.config.source.rpcUrl] } } }, transport: custom(window.ethereum) }); const hash = await sourceWallet.writeContract({ account: state.account, chain: sourceWallet.chain, address: state.config.source.vault, abi: sourceAbi, functionName: 'bridge', args: [state.nft.collection, state.nft.tokenId] });
