@@ -4,6 +4,8 @@ A centralized, one-way ERC-721 bridge from Degen Chain to Base. The source NFT i
 
 > Current release: controlled test deployment. The cross-chain test passed, but public relaying is intentionally disabled until the Base mainnet production deployment. Do not deposit valuable NFTs into the deployed Degen vault.
 
+Live application and read-only status API: **https://degen-base-nft-bridge.vercel.app**
+
 ## Architecture
 
 1. A holder approves `DegenNftVault` and calls `bridge(collection, tokenId)`.

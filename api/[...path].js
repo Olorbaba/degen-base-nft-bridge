@@ -121,7 +121,7 @@ export default async function handler(req, res) {
     : `/${String(req.query?.path || (req.url || '/').split('?')[0]).replace(/^\/?api\/?/, '').replace(/^\/+/, '')}`;
   try {
     if (path === '/api/config' || path === '/config') return json(res, 200, publicConfig());
-    if (path === '/api/status' || path === '/health' || path === '/healthz') return json(res, 200, await status());
+    if (path === '/api/status' || path === '/status' || path === '/health' || path === '/healthz') return json(res, 200, await status());
     if (path === '/api/transfers' || path === '/transfers') return json(res, 200, { transfers: [proofTransfer] });
     if (path.startsWith('/transfers/')) {
       const id = decodeURIComponent(path.slice('/transfers/'.length));
