@@ -19,6 +19,66 @@
   text-overflow: ellipsis;
 }
 
+.rpc-repair {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.rpc-repair button,
+.rpc-help button {
+  border: 1px solid var(--line-light);
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 7px 9px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.rpc-help {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #ffc85745;
+  border-radius: 6px;
+  background: #ffc8570b;
+}
+
+.rpc-help[hidden] {
+  display: none;
+}
+
+.rpc-help strong {
+  font-size: 10px;
+}
+
+.rpc-help p {
+  margin: 5px 0 10px;
+  color: #aaa38f;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.rpc-help > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+}
+
+.rpc-help code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 9px var(--mono);
+  color: var(--amber);
+}
+
 @media (max-width: 640px) {
   .relayer-identity > div {
     display: grid;

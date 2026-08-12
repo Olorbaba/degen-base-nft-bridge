@@ -45,6 +45,8 @@ The application includes four operational views:
 
 The current server-provided configuration enables the public Ethereum Sepolia → Base Sepolia test route. The former Degen-mainnet → Base-Sepolia hybrid route remains retired.
 
+If an injected wallet has Base Sepolia saved with the rate-limited RouteMe endpoint, use **Relayer → Repair wallet RPC** and replace the wallet network RPC with `https://base-sepolia-rpc.publicnode.com`. Wallet security prevents a website from silently overwriting an existing saved RPC.
+
 Independently verify the live test deployment without a wallet or private key:
 
 ```bash

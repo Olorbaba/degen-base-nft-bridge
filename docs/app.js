@@ -29,7 +29,7 @@ function toast(message, type = '') { const item = document.createElement('div');
 function errorMessage(error, chain) {
   const message = error?.shortMessage || error?.message || String(error);
   if (/\b429\b|rate.?limit|too many requests/i.test(message)) {
-    return `${chain?.name || 'Network'} RPC is rate limited. Wait 30 seconds and retry. If it continues, set your wallet RPC to ${chain?.rpcUrls?.[0] || chain?.rpcUrl}.`;
+    return `${chain?.name || 'Network'} is using a rate-limited wallet RPC. Open the RPC repair panel and replace RouteMe, then retry.`;
   }
   return message;
 }
@@ -44,7 +44,7 @@ setView(location.hash.slice(1) || 'bridge');
 
 async function api(path) { const response = await fetch(`${API_BASE}${path}`, { headers: { accept: 'application/json' } }); if (!response.ok) throw new Error(`API ${response.status}`); return response.json(); }
 function fallbackConfig() {
-  return { bridgeEnabled: false, safetyReason: 'The live testnet relayer API is not connected. Bridge transactions remain disabled.', routeMode: 'public-testnet', source: { name: 'Ethereum Sepolia', chainId: 11155111, currency: 'ETH', rpcUrl: proof.source.rpc, explorerUrl: 'https://sepolia.etherscan.io', vault: proof.source.address }, destination: { name: 'Base Sepolia', chainId: 84532, currency: 'ETH', rpcUrl: proof.destination.rpc, explorerUrl: 'https://sepolia.basescan.org', mirror: proof.destination.address }, relayer: '0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D' };
+  return { bridgeEnabled: false, safetyReason: 'The live testnet relayer API is not connected. Bridge transactions remain disabled.', routeMode: 'public-testnet', source: { name: 'Ethereum Sepolia', chainId: 11155111, currency: 'ETH', rpcUrl: proof.source.rpc, explorerUrl: 'https://sepolia.etherscan.io', vault: proof.source.address }, destination: { name: 'Base Sepolia', chainId: 84532, currency: 'ETH', rpcUrl: proof.destination.rpc, rpcUrls: [proof.destination.rpc, 'https://base-sepolia.drpc.org', 'https://sepolia.base.org'], explorerUrl: 'https://sepolia.basescan.org', mirror: proof.destination.address }, relayer: '0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D' };
 }
 async function loadConfig() {
   try { state.config = await api('/api/config'); state.apiOnline = true; setApiIndicator('online', 'API online'); }
@@ -56,6 +56,7 @@ function renderConfig() {
   $('destination-network-name').textContent = config.destination.name;
   $('destination-chain-id').textContent = config.destination.chainId;
   $('base-fund-network').textContent = config.destination.name.toUpperCase();
+  $('preferred-base-rpc').textContent = config.destination.rpcUrls?.[0] || config.destination.rpcUrl;
   $('relayer-address').textContent = config.relayer;
   $('relayer-explorer-link').href = explorer(config.destination.explorerUrl, 'address', config.relayer);
   $('safety-banner').hidden = config.bridgeEnabled;
@@ -177,10 +178,29 @@ async function fundRelayer(event) {
   event.preventDefault(); if (!state.account) await connectWallet(); if (!state.account) return; const chainKey = event.currentTarget.dataset.chain; const chain = chainKey === 'base' ? state.config.destination : state.config.source; const input = event.currentTarget.querySelector('input');
   if (!input.value || Number(input.value) <= 0) return toast('Enter an amount greater than zero.', 'error');
   try { await switchChain(chain); const wallet = createWalletClient({ account: state.account, chain: { id: chain.chainId, name: chain.name, nativeCurrency: { name: chain.currency === 'ETH' ? 'Ether' : chain.currency, symbol: chain.currency, decimals: 18 }, rpcUrls: { default: { http: chain.rpcUrls?.length ? chain.rpcUrls : [chain.rpcUrl] } } }, transport: custom(window.ethereum) }); const hash = await wallet.sendTransaction({ account: state.account, chain: wallet.chain, to: state.config.relayer, value: parseEther(input.value) }); toast(`${chain.currency} top-up submitted: ${short(hash)}`, 'success'); input.value = ''; setTimeout(() => loadStatus(true), 5000); }
-  catch (error) { toast(errorMessage(error, chain), 'error'); }
+  catch (error) { if (/\b429\b|rate.?limit|too many requests|routeme/i.test(error?.shortMessage || error?.message || String(error))) $('wallet-rpc-help').hidden = false; toast(errorMessage(error, chain), 'error'); }
 }
 document.querySelectorAll('.fund-form').forEach(form => form.addEventListener('submit', fundRelayer));
 $('copy-relayer').addEventListener('click', async () => { await navigator.clipboard.writeText(state.config.relayer); toast('Relayer address copied', 'success'); });
+
+async function copyPreferredBaseRpc() {
+  const rpc = state.config?.destination?.rpcUrls?.[0] || state.config?.destination?.rpcUrl || proof.destination.rpc;
+  await navigator.clipboard.writeText(rpc);
+  toast('Stable Base Sepolia RPC copied', 'success');
+}
+$('copy-base-rpc').addEventListener('click', () => copyPreferredBaseRpc().catch(() => toast('Copy the displayed RPC URL manually.', 'error')));
+$('repair-base-rpc').addEventListener('click', async () => {
+  if (!window.ethereum) return toast('Connect a browser wallet first.', 'error');
+  const chain = state.config.destination;
+  $('wallet-rpc-help').hidden = false;
+  try {
+    await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [chainParams(chain)] });
+    await switchChain(chain);
+    toast('Base Sepolia network submitted with the stable RPC. Retry the transfer.', 'success');
+  } catch (error) {
+    toast('Your wallet kept its existing RouteMe RPC. Replace it manually using the URL shown below.', 'error');
+  }
+});
 
 function wireProof() {
   $('bridge-id').textContent = short(proof.bridgeId, 10, 8); $('bridge-id').title = proof.bridgeId; $('recipient').textContent = short(proof.recipient); $('recipient').title = proof.recipient;
