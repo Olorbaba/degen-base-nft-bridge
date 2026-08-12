@@ -1,10 +1,10 @@
-import { createPublicClient, createWalletClient, defineChain, formatEther, http } from 'viem';
+import { createPublicClient, createWalletClient, defineChain, fallback, formatEther, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sourceAbi, mirrorAbi } from '../src/abis.js';
 
 const DEFAULTS = {
   sourceRpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
-  destinationRpcUrl: 'https://sepolia.base.org',
+  destinationRpcUrl: 'https://base-sepolia-rpc.publicnode.com',
   sourceChainId: 11155111,
   destinationChainId: 84532,
   sourceVault: '0xC6a0208aE6FAb9c5Ddfe59700900EBcC6661A8a2',
@@ -19,6 +19,7 @@ const DEFAULTS = {
 };
 
 const env = (key, fallback) => process.env[key] ?? fallback;
+const uniqueUrls = values => [...new Set(values.flatMap(value => String(value || '').split(',')).map(value => value.trim()).filter(Boolean))];
 const config = {
   sourceRpcUrl: env('SOURCE_RPC_URL', DEFAULTS.sourceRpcUrl),
   destinationRpcUrl: env('BASE_RPC_URL', DEFAULTS.destinationRpcUrl),
@@ -32,11 +33,26 @@ const config = {
   sourceConfirmations: BigInt(env('SOURCE_CONFIRMATIONS', DEFAULTS.sourceConfirmations)),
   destinationConfirmations: BigInt(env('DESTINATION_CONFIRMATIONS', DEFAULTS.destinationConfirmations))
 };
+config.destinationRpcUrls = uniqueUrls([
+  env('BASE_RPC_URLS', ''),
+  config.destinationRpcUrl,
+  'https://base-sepolia.drpc.org',
+  'https://sepolia.base.org'
+]);
+
+const rpcTransport = urls => fallback(urls.map((url, index) => http(url, {
+  key: `rpc-${index}`,
+  name: `RPC ${index + 1}`,
+  retryCount: 1,
+  retryDelay: 500,
+  timeout: 20_000
+})), { retryCount: 1, retryDelay: 750 });
 
 const sourceChain = defineChain({ id: config.sourceChainId, name: 'Ethereum Sepolia', nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [config.sourceRpcUrl] } } });
-const destinationChain = defineChain({ id: config.destinationChainId, name: 'Base Sepolia', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [config.destinationRpcUrl] } } });
+const destinationChain = defineChain({ id: config.destinationChainId, name: 'Base Sepolia', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: config.destinationRpcUrls } } });
 const source = createPublicClient({ chain: sourceChain, transport: http(config.sourceRpcUrl, { retryCount: 3, timeout: 25_000 }) });
-const destination = createPublicClient({ chain: destinationChain, transport: http(config.destinationRpcUrl, { retryCount: 3, timeout: 25_000 }) });
+const destinationTransport = rpcTransport(config.destinationRpcUrls);
+const destination = createPublicClient({ chain: destinationChain, transport: destinationTransport });
 const bridgeEvent = sourceAbi.find(item => item.type === 'event' && item.name === 'NFTBridged');
 const mintEvent = mirrorAbi.find(item => item.type === 'event' && item.name === 'MirrorMinted');
 const privateKey = /^0x[0-9a-fA-F]{64}$/.test(process.env.RELAYER_PRIVATE_KEY || '') ? process.env.RELAYER_PRIVATE_KEY : null;
@@ -50,7 +66,7 @@ function publicConfig() {
     safetyReason: relayEnabled ? null : 'The testnet relayer is temporarily unavailable. New deposits are disabled.',
     routeMode: 'public-testnet',
     source: { name: sourceChain.name, chainId: sourceChain.id, currency: 'ETH', rpcUrl: config.sourceRpcUrl, explorerUrl: 'https://sepolia.etherscan.io', vault: config.sourceVault, confirmations: config.sourceConfirmations.toString() },
-    destination: { name: destinationChain.name, chainId: destinationChain.id, currency: 'ETH', rpcUrl: config.destinationRpcUrl, explorerUrl: 'https://sepolia.basescan.org', mirror: config.mirror, confirmations: config.destinationConfirmations.toString() },
+    destination: { name: destinationChain.name, chainId: destinationChain.id, currency: 'ETH', rpcUrl: config.destinationRpcUrls[0], rpcUrls: config.destinationRpcUrls, explorerUrl: 'https://sepolia.basescan.org', mirror: config.mirror, confirmations: config.destinationConfirmations.toString() },
     relayer: config.relayer, publicAppUrl: env('PUBLIC_APP_URL', 'https://degen-base-nft-bridge.vercel.app')
   };
 }
@@ -110,7 +126,7 @@ async function relay(bridgeId) {
   const { logs } = await sourceLogs();
   const log = logs.find(item => item.args.id.toLowerCase() === bridgeId.toLowerCase());
   if (!log) throw new Error('finalized bridge event not found in the configured source vault');
-  const wallet = createWalletClient({ account, chain: destinationChain, transport: http(config.destinationRpcUrl, { retryCount: 3, timeout: 25_000 }) });
+  const wallet = createWalletClient({ account, chain: destinationChain, transport: destinationTransport });
   const hash = await wallet.writeContract({ address: config.mirror, abi: mirrorAbi, functionName: 'mintFromDegen', args: [log.args.id, log.args.holder, log.args.collection, log.args.tokenId, log.args.tokenUri] });
   return { status: 'submitted', bridgeId, destinationTxHash: hash };
 }

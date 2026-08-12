@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createStatusService, readConfig } from '../src/relayer.js';
+import { createPublicClient, custom } from 'viem';
+import { createRpcTransport, createStatusService, readConfig } from '../src/relayer.js';
 
 const address = `0x${'11'.repeat(20)}`;
 const config = {
@@ -39,7 +40,7 @@ test('status service exposes safety, balances, queue, config, and transfers', as
 test('read-only hybrid API starts without a private key and keeps bridging disabled', () => {
   const result = readConfig({
     DEGEN_RPC_URL: 'https://rpc.degen.tips', DEGEN_CHAIN_ID: '666666666',
-    BASE_RPC_URL: 'https://sepolia.base.org', BASE_CHAIN_ID: '84532',
+    BASE_RPC_URL: 'https://base-sepolia-rpc.publicnode.com', BASE_CHAIN_ID: '84532',
     SOURCE_VAULT_ADDRESS: address, BASE_MIRROR_ADDRESS: `0x${'22'.repeat(20)}`,
     RELAYER_ADDRESS: address, RELAY_ENABLED: 'false', ALLOW_HYBRID_BRIDGE: 'false'
   });
@@ -52,7 +53,7 @@ test('Ethereum Sepolia source configuration uses generic source variables', () =
   const result = readConfig({
     SOURCE_RPC_URL: 'https://ethereum-sepolia-rpc.publicnode.com', SOURCE_CHAIN_ID: '11155111',
     SOURCE_CHAIN_NAME: 'Ethereum Sepolia', SOURCE_CURRENCY_SYMBOL: 'ETH',
-    BASE_RPC_URL: 'https://sepolia.base.org', BASE_CHAIN_ID: '84532',
+    BASE_RPC_URL: 'https://base-sepolia-rpc.publicnode.com', BASE_CHAIN_ID: '84532',
     SOURCE_VAULT_ADDRESS: address, BASE_MIRROR_ADDRESS: `0x${'22'.repeat(20)}`,
     RELAYER_ADDRESS: address, RELAY_ENABLED: 'false'
   });
@@ -60,4 +61,34 @@ test('Ethereum Sepolia source configuration uses generic source variables', () =
   assert.equal(result.sourceChain.name, 'Ethereum Sepolia');
   assert.equal(result.sourceChain.nativeCurrency.symbol, 'ETH');
   assert.equal(result.hybridRoute, false);
+  assert.deepEqual(result.destinationRpcUrls, [
+    'https://base-sepolia-rpc.publicnode.com',
+    'https://base-sepolia.drpc.org',
+    'https://sepolia.base.org'
+  ]);
+});
+
+test('destination RPC configuration is de-duplicated and keeps operator priority', () => {
+  const result = readConfig({
+    SOURCE_RPC_URL: 'https://source.invalid', SOURCE_CHAIN_ID: '11155111',
+    BASE_RPC_URL: 'https://primary.invalid', BASE_RPC_URLS: 'https://primary.invalid, https://backup.invalid', BASE_CHAIN_ID: '84532',
+    SOURCE_VAULT_ADDRESS: address, BASE_MIRROR_ADDRESS: `0x${'22'.repeat(20)}`,
+    RELAYER_ADDRESS: address, RELAY_ENABLED: 'false'
+  });
+  assert.deepEqual(result.destinationRpcUrls.slice(0, 2), ['https://primary.invalid', 'https://backup.invalid']);
+  assert.equal(new Set(result.destinationRpcUrls).size, result.destinationRpcUrls.length);
+});
+
+test('destination transport fails over after an HTTP 429', async () => {
+  const calls = [];
+  const transportFactory = url => custom({
+    request: async ({ method }) => {
+      calls.push({ url, method });
+      if (url === 'primary') throw Object.assign(new Error('Request failed with status code 429'), { status: 429 });
+      return '0x14a34';
+    }
+  });
+  const client = createPublicClient({ transport: createRpcTransport(['primary', 'backup'], transportFactory) });
+  assert.equal(await client.getChainId(), 84532);
+  assert.deepEqual(calls.map(call => call.url), ['primary', 'backup']);
 });

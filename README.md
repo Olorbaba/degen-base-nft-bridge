@@ -61,6 +61,7 @@ Important variables:
 - `SOURCE_VAULT_ADDRESS`: deployed source vault.
 - `SOURCE_START_BLOCK`: vault deployment block.
 - `BASE_MIRROR_ADDRESS`: destination mirror.
+- `BASE_RPC_URLS`: optional comma-separated destination RPC failover list used for rate limits and outages.
 - `RELAYER_PRIVATE_KEY`: destination mint-authority key.
 - `SOURCE_CONFIRMATIONS` / `DESTINATION_CONFIRMATIONS`: finality delays.
 - `STATE_FILE`: durable relayer checkpoint and transfer state.

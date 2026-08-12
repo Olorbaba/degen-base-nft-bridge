@@ -4,7 +4,7 @@ import { mirrorAbi, sourceAbi } from '../src/abis.js';
 
 const deployments = JSON.parse(await fs.readFile(new URL('../deployments.json', import.meta.url)));
 const source = createPublicClient({ transport: http(process.env.SOURCE_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com', { retryCount: 5 }) });
-const destination = createPublicClient({ transport: http(process.env.BASE_RPC_URL || 'https://sepolia.base.org', { retryCount: 5 }) });
+const destination = createPublicClient({ transport: http(process.env.BASE_RPC_URL || 'https://base-sepolia-rpc.publicnode.com', { retryCount: 5 }) });
 const mirrorChecksAbi = [
   ...mirrorAbi,
   { type: 'function', name: 'owner', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] },

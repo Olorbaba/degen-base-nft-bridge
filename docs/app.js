@@ -3,7 +3,7 @@ import { createPublicClient, createWalletClient, custom, decodeEventLog, formatE
 const API_BASE = window.BRIDGE_API_URL || (location.hostname.endsWith('github.io') ? '' : location.origin);
 const proof = {
   source: { address: '0xC6a0208aE6FAb9c5Ddfe59700900EBcC6661A8a2', tx: '0xce77a76c2e844dd88cd1125efacc32fb8060f10d2d1de8a7d63a3784dc152e35', rpc: 'https://ethereum-sepolia-rpc.publicnode.com' },
-  destination: { address: '0xa0A44dEAD4F124B425DeE4466d542DD612D10517', tx: '0x118a89de268719820cca1a414d36382f67dc670fba19d74478c816c45c6d6c14', rpc: 'https://sepolia.base.org' },
+  destination: { address: '0xa0A44dEAD4F124B425DeE4466d542DD612D10517', tx: '0x118a89de268719820cca1a414d36382f67dc670fba19d74478c816c45c6d6c14', rpc: 'https://base-sepolia-rpc.publicnode.com' },
   bridgeId: '0xc46a638002a527d7cf70cd18ee46928c9b585a366ec3b5d915a98b6e9e8cd84b',
   collection: '0x63eb1893E15c98E866F636A6974B5DA3b44CEdEA', recipient: '0xbFdD3790aBb0768FAe791cf1c551F15Aa7Bb498f'
 };
@@ -26,6 +26,13 @@ const formatBalance = value => { const number = Number(value || 0); return numbe
 const explorer = (base, kind, value) => `${base}/${kind}/${value}`;
 
 function toast(message, type = '') { const item = document.createElement('div'); item.className = `toast ${type}`; item.textContent = message; $('toast-region').append(item); setTimeout(() => item.remove(), 5200); }
+function errorMessage(error, chain) {
+  const message = error?.shortMessage || error?.message || String(error);
+  if (/\b429\b|rate.?limit|too many requests/i.test(message)) {
+    return `${chain?.name || 'Network'} RPC is rate limited. Wait 30 seconds and retry. If it continues, set your wallet RPC to ${chain?.rpcUrls?.[0] || chain?.rpcUrl}.`;
+  }
+  return message;
+}
 function setApiIndicator(mode, text) { $('api-indicator').className = `api-indicator ${mode}`; $('api-indicator').querySelector('span').textContent = text; }
 function setView(name) {
   document.querySelectorAll('.view').forEach(view => view.classList.toggle('active', view.dataset.view === name));
@@ -93,7 +100,7 @@ function renderTransfers() {
 document.querySelectorAll('[data-transfer-filter]').forEach(button => button.addEventListener('click', () => { document.querySelectorAll('[data-transfer-filter]').forEach(item => item.classList.remove('active')); button.classList.add('active'); state.filter = button.dataset.transferFilter; renderTransfers(); }));
 $('refresh-transfers').addEventListener('click', () => loadStatus());
 
-function chainParams(chain) { return { chainId: `0x${chain.chainId.toString(16)}`, chainName: chain.name, nativeCurrency: { name: chain.currency === 'ETH' ? 'Ether' : chain.currency, symbol: chain.currency, decimals: 18 }, rpcUrls: [chain.rpcUrl], blockExplorerUrls: [chain.explorerUrl] }; }
+function chainParams(chain) { return { chainId: `0x${chain.chainId.toString(16)}`, chainName: chain.name, nativeCurrency: { name: chain.currency === 'ETH' ? 'Ether' : chain.currency, symbol: chain.currency, decimals: 18 }, rpcUrls: chain.rpcUrls?.length ? chain.rpcUrls : [chain.rpcUrl], blockExplorerUrls: [chain.explorerUrl] }; }
 async function switchChain(chain) {
   if (!window.ethereum) throw new Error('No injected wallet found');
   try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: `0x${chain.chainId.toString(16)}` }] }); }
@@ -169,8 +176,8 @@ $('transaction-action').addEventListener('click', transactionAction);
 async function fundRelayer(event) {
   event.preventDefault(); if (!state.account) await connectWallet(); if (!state.account) return; const chainKey = event.currentTarget.dataset.chain; const chain = chainKey === 'base' ? state.config.destination : state.config.source; const input = event.currentTarget.querySelector('input');
   if (!input.value || Number(input.value) <= 0) return toast('Enter an amount greater than zero.', 'error');
-  try { await switchChain(chain); const wallet = createWalletClient({ account: state.account, chain: { id: chain.chainId, name: chain.name, nativeCurrency: { name: chain.currency === 'ETH' ? 'Ether' : chain.currency, symbol: chain.currency, decimals: 18 }, rpcUrls: { default: { http: [chain.rpcUrl] } } }, transport: custom(window.ethereum) }); const hash = await wallet.sendTransaction({ account: state.account, chain: wallet.chain, to: state.config.relayer, value: parseEther(input.value) }); toast(`${chain.currency} top-up submitted: ${short(hash)}`, 'success'); input.value = ''; setTimeout(() => loadStatus(true), 5000); }
-  catch (error) { toast(error.shortMessage || error.message, 'error'); }
+  try { await switchChain(chain); const wallet = createWalletClient({ account: state.account, chain: { id: chain.chainId, name: chain.name, nativeCurrency: { name: chain.currency === 'ETH' ? 'Ether' : chain.currency, symbol: chain.currency, decimals: 18 }, rpcUrls: { default: { http: chain.rpcUrls?.length ? chain.rpcUrls : [chain.rpcUrl] } } }, transport: custom(window.ethereum) }); const hash = await wallet.sendTransaction({ account: state.account, chain: wallet.chain, to: state.config.relayer, value: parseEther(input.value) }); toast(`${chain.currency} top-up submitted: ${short(hash)}`, 'success'); input.value = ''; setTimeout(() => loadStatus(true), 5000); }
+  catch (error) { toast(errorMessage(error, chain), 'error'); }
 }
 document.querySelectorAll('.fund-form').forEach(form => form.addEventListener('submit', fundRelayer));
 $('copy-relayer').addEventListener('click', async () => { await navigator.clipboard.writeText(state.config.relayer); toast('Relayer address copied', 'success'); });

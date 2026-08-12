@@ -4,7 +4,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { privateKeyToAccount } from 'viem/accounts';
-import { createPublicClient, createWalletClient, defineChain, formatEther, http as viemHttp, parseAbiItem } from 'viem';
+import { createPublicClient, createWalletClient, defineChain, fallback, formatEther, http as viemHttp, parseAbiItem } from 'viem';
 import { sourceAbi, mirrorAbi, erc721MetadataAbi } from './abis.js';
 import { loadState, saveState } from './state.js';
 
@@ -12,6 +12,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const docsRoot = path.resolve(here, '../docs');
 const n = (env, name, fallback) => env[name] === undefined ? fallback : Number(env[name]);
 const bool = (env, name, fallback = false) => env[name] === undefined ? fallback : env[name] === 'true';
+const uniqueUrls = values => [...new Set(values.flatMap(value => String(value || '').split(',')).map(value => value.trim()).filter(Boolean))];
 const address = (value, name) => {
   if (!value || !/^0x[0-9a-fA-F]{40}$/.test(value)) throw new Error(`${name} must be a 20-byte hex address`);
   return value;
@@ -19,14 +20,20 @@ const address = (value, name) => {
 
 export function readConfig(env = process.env) {
   const sourceRpcUrl = env.SOURCE_RPC_URL || env.DEGEN_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
-  const destinationRpcUrl = env.BASE_RPC_URL || 'https://sepolia.base.org';
+  const destinationRpcUrl = env.BASE_RPC_URL || 'https://base-sepolia-rpc.publicnode.com';
   const sourceChainId = Number(env.SOURCE_CHAIN_ID || env.DEGEN_CHAIN_ID || 11155111);
   const destinationChainId = Number(env.BASE_CHAIN_ID || 84532);
+  const destinationRpcUrls = uniqueUrls([
+    env.BASE_RPC_URLS,
+    destinationRpcUrl,
+    destinationChainId === 84532 ? 'https://base-sepolia.drpc.org' : null,
+    destinationChainId === 84532 ? 'https://sepolia.base.org' : null
+  ]);
   const sourceIsDegen = sourceChainId === 666666666;
   const sourceSymbol = env.SOURCE_CURRENCY_SYMBOL || (sourceIsDegen ? 'DEGEN' : 'ETH');
   const sourceName = env.SOURCE_CHAIN_NAME || (sourceIsDegen ? 'Degen Chain' : sourceChainId === 11155111 ? 'Ethereum Sepolia' : `Source chain ${sourceChainId}`);
   const sourceChain = defineChain({ id: sourceChainId, name: sourceName, nativeCurrency: { name: sourceSymbol === 'ETH' ? 'Ether' : sourceSymbol, symbol: sourceSymbol, decimals: 18 }, rpcUrls: { default: { http: [sourceRpcUrl] } } });
-  const destinationChain = defineChain({ id: destinationChainId, name: destinationChainId === 8453 ? 'Base' : 'Base Sepolia', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [destinationRpcUrl] } } });
+  const destinationChain = defineChain({ id: destinationChainId, name: destinationChainId === 8453 ? 'Base' : 'Base Sepolia', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: destinationRpcUrls } } });
   const privateKey = env.RELAYER_PRIVATE_KEY && /^0x[0-9a-fA-F]{64}$/.test(env.RELAYER_PRIVATE_KEY) ? env.RELAYER_PRIVATE_KEY : null;
   const account = privateKey ? privateKeyToAccount(privateKey) : null;
   const relayerAddress = address(env.RELAYER_ADDRESS || account?.address, 'RELAYER_ADDRESS');
@@ -44,7 +51,7 @@ export function readConfig(env = process.env) {
       : 'Relaying is disabled by the operator.';
 
   return {
-    sourceChain, destinationChain, sourceRpcUrl, destinationRpcUrl, account, relayerAddress,
+    sourceChain, destinationChain, sourceRpcUrl, destinationRpcUrl, destinationRpcUrls, account, relayerAddress,
     sourceVault: address(env.SOURCE_VAULT_ADDRESS, 'SOURCE_VAULT_ADDRESS'),
     mirror: address(env.BASE_MIRROR_ADDRESS, 'BASE_MIRROR_ADDRESS'),
     sourceStartBlock: BigInt(env.SOURCE_START_BLOCK || 0),
@@ -61,10 +68,21 @@ export function readConfig(env = process.env) {
 
 const bridgeEvent = parseAbiItem('event NFTBridged(bytes32 indexed id,address indexed collection,uint256 indexed tokenId,address holder,string tokenUri,uint256 timestamp)');
 
+export function createRpcTransport(urls, transportFactory = viemHttp) {
+  return fallback(urls.map((url, index) => transportFactory(url, {
+    key: `rpc-${index}`,
+    name: `RPC ${index + 1}`,
+    retryCount: 1,
+    retryDelay: 500,
+    timeout: 20_000
+  })), { retryCount: 1, retryDelay: 750 });
+}
+
 export function createRelayer(config, clients = {}) {
+  const destinationTransport = createRpcTransport(config.destinationRpcUrls || [config.destinationRpcUrl]);
   const source = clients.source || createPublicClient({ chain: config.sourceChain, transport: viemHttp(config.sourceRpcUrl, { retryCount: 5 }) });
-  const destination = clients.destination || createPublicClient({ chain: config.destinationChain, transport: viemHttp(config.destinationRpcUrl, { retryCount: 5 }) });
-  const wallet = clients.wallet || (config.relayEnabled ? createWalletClient({ account: config.account, chain: config.destinationChain, transport: viemHttp(config.destinationRpcUrl, { retryCount: 5 }) }) : null);
+  const destination = clients.destination || createPublicClient({ chain: config.destinationChain, transport: destinationTransport });
+  const wallet = clients.wallet || (config.relayEnabled ? createWalletClient({ account: config.account, chain: config.destinationChain, transport: destinationTransport }) : null);
   let state;
   let running = false;
   let lastPollAt = null;
@@ -195,7 +213,7 @@ export function createStatusService(config, relayer) {
       safetyReason: config.safetyReason,
       routeMode: config.hybridRoute ? 'controlled-test' : 'production',
       source: { name: config.sourceChain.name, chainId: config.sourceChain.id, currency: config.sourceChain.nativeCurrency.symbol, rpcUrl: config.sourceRpcUrl, explorerUrl: config.sourceChain.id === 11155111 ? 'https://sepolia.etherscan.io' : 'https://explorer.degen.tips', vault: config.sourceVault, confirmations: config.sourceConfirmations.toString() },
-      destination: { name: config.destinationChain.name, chainId: config.destinationChain.id, currency: 'ETH', rpcUrl: config.destinationRpcUrl, explorerUrl: config.destinationChain.id === 8453 ? 'https://basescan.org' : 'https://sepolia.basescan.org', mirror: config.mirror, confirmations: config.destinationConfirmations.toString() },
+      destination: { name: config.destinationChain.name, chainId: config.destinationChain.id, currency: 'ETH', rpcUrl: config.destinationRpcUrls?.[0] || config.destinationRpcUrl, rpcUrls: config.destinationRpcUrls || [config.destinationRpcUrl], explorerUrl: config.destinationChain.id === 8453 ? 'https://basescan.org' : 'https://sepolia.basescan.org', mirror: config.mirror, confirmations: config.destinationConfirmations.toString() },
       relayer: config.relayerAddress,
       publicAppUrl: config.publicAppUrl
     };
