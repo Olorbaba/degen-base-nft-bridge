@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPublicClient, custom } from 'viem';
-import { createRpcTransport, createStatusService, readConfig } from '../src/relayer.js';
+import { createRpcTransport, createStatusService, readConfig, relayById } from '../src/relayer.js';
 
 const address = `0x${'11'.repeat(20)}`;
 const config = {
@@ -10,10 +10,11 @@ const config = {
   sourceConfirmations: 20n, destinationConfirmations: 10n, publicAppUrl: '',
   sourceChain: { id: 666666666, name: 'Degen Chain', nativeCurrency: { symbol: 'DEGEN' } },
   destinationChain: { id: 84532, name: 'Base Sepolia', nativeCurrency: { symbol: 'ETH' } },
-  sourceRpcUrl: 'https://source.invalid', destinationRpcUrl: 'https://destination.invalid'
+  sourceRpcUrl: 'https://source.invalid', destinationRpcUrl: 'https://destination.invalid', corsOrigin: '*'
 };
 const transfer = { id: `0x${'33'.repeat(32)}`, sourceBlock: '10', sourceTokenId: '1', status: 'completed' };
 const relayer = {
+  poll: async () => {},
   snapshot: () => ({ version: 1, nextBlock: '11', transfers: { bridge: transfer } }),
   runtime: () => ({ running: false, lastSuccessfulPollAt: '2026-01-01T00:00:00.000Z', lastError: null }),
   clients: {
@@ -37,6 +38,14 @@ test('status service exposes safety, balances, queue, config, and transfers', as
   assert.deepEqual(service.transfers(), [transfer]);
 });
 
+test('Railway relay endpoint logic returns indexed status', async () => {
+  const result = await relayById(relayer, createStatusService(config, relayer), transfer.id);
+  assert.equal(result.statusCode, 200);
+  assert.deepEqual(result.body, {
+    status: 'completed', bridgeId: transfer.id, destinationTxHash: null, mirrorTokenId: null
+  });
+});
+
 test('read-only hybrid API starts without a private key and keeps bridging disabled', () => {
   const result = readConfig({
     DEGEN_RPC_URL: 'https://rpc.degen.tips', DEGEN_CHAIN_ID: '666666666',
@@ -47,6 +56,17 @@ test('read-only hybrid API starts without a private key and keeps bridging disab
   assert.equal(result.account, null);
   assert.equal(result.relayEnabled, false);
   assert.match(result.safetyReason, /proof route/);
+});
+
+test('Degen mainnet requires an explicit production safety opt-in', () => {
+  const result = readConfig({
+    SOURCE_RPC_URL: 'https://rpc.degen.tips', SOURCE_CHAIN_ID: '666666666',
+    BASE_RPC_URL: 'https://base-rpc.publicnode.com', BASE_CHAIN_ID: '8453',
+    SOURCE_VAULT_ADDRESS: address, BASE_MIRROR_ADDRESS: `0x${'22'.repeat(20)}`,
+    RELAYER_ADDRESS: address, RELAY_ENABLED: 'true', ALLOW_DEGEN_MAINNET: 'false'
+  });
+  assert.equal(result.relayEnabled, false);
+  assert.match(result.safetyReason, /ALLOW_DEGEN_MAINNET/);
 });
 
 test('Ethereum Sepolia source configuration uses generic source variables', () => {

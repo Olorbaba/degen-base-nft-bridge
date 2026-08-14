@@ -42,12 +42,17 @@ export function readConfig(env = process.env) {
   const requestedRelay = bool(env, 'RELAY_ENABLED');
   const hybridRoute = sourceChainId === 666666666 && destinationChainId === 84532;
   const hybridAllowed = bool(env, 'ALLOW_HYBRID_BRIDGE');
-  const relayEnabled = requestedRelay && (!hybridRoute || hybridAllowed);
+  const degenMainnetAllowed = bool(env, 'ALLOW_DEGEN_MAINNET');
+  const relayEnabled = requestedRelay
+    && (!sourceIsDegen || degenMainnetAllowed)
+    && (!hybridRoute || hybridAllowed);
   if (relayEnabled && !account) throw new Error('RELAYER_PRIVATE_KEY is required when RELAY_ENABLED=true');
   const safetyReason = relayEnabled
     ? null
     : hybridRoute && !hybridAllowed
       ? 'Degen mainnet → Base Sepolia is a proof route. Deposits are disabled to prevent locking real NFTs for testnet assets.'
+      : sourceIsDegen && !degenMainnetAllowed
+        ? 'Degen mainnet is safety locked until ALLOW_DEGEN_MAINNET=true is explicitly configured.'
       : 'Relaying is disabled by the operator.';
 
   return {
@@ -62,7 +67,7 @@ export function readConfig(env = process.env) {
     port: n(env, 'PORT', 8787),
     corsOrigin: env.CORS_ORIGIN || '*',
     publicAppUrl: env.PUBLIC_APP_URL || '',
-    relayEnabled, requestedRelay, hybridRoute, safetyReason
+    relayEnabled, requestedRelay, hybridRoute, degenMainnetAllowed, safetyReason
   };
 }
 
@@ -268,13 +273,43 @@ function sendJson(response, status, value, corsOrigin) {
   response.end(JSON.stringify(value));
 }
 
+async function readJsonBody(request, maxBytes = 4096) {
+  let body = '';
+  for await (const chunk of request) {
+    body += chunk;
+    if (Buffer.byteLength(body) > maxBytes) throw new Error('request body too large');
+  }
+  return body ? JSON.parse(body) : {};
+}
+
+export async function relayById(relayer, statusService, bridgeId) {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(bridgeId || '')) return { statusCode: 400, body: { error: 'invalid bridge ID' } };
+  await relayer.poll();
+  const transfer = statusService.transfers().find(item => item.id.toLowerCase() === bridgeId.toLowerCase());
+  if (!transfer) return { statusCode: 202, body: { status: 'accepted', bridgeId, message: 'Waiting for source confirmations and the next relayer poll.' } };
+  return {
+    statusCode: transfer.status === 'completed' ? 200 : 202,
+    body: {
+      status: transfer.status,
+      bridgeId,
+      destinationTxHash: transfer.destinationTxHash || null,
+      mirrorTokenId: transfer.mirrorTokenId || null
+    }
+  };
+}
+
 export function createHttpServer(relayer, config, statusService = createStatusService(config, relayer)) {
   return http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url, 'http://localhost');
       if (request.method === 'OPTIONS') {
-        response.writeHead(204, { 'access-control-allow-origin': config.corsOrigin, 'access-control-allow-methods': 'GET, OPTIONS', 'access-control-allow-headers': 'content-type' });
+        response.writeHead(204, { 'access-control-allow-origin': config.corsOrigin, 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type' });
         response.end(); return;
+      }
+      if (request.method === 'POST' && url.pathname === '/api/relay') {
+        const { bridgeId } = await readJsonBody(request);
+        const result = await relayById(relayer, statusService, bridgeId);
+        return sendJson(response, result.statusCode, result.body, config.corsOrigin);
       }
       if (request.method === 'GET' && url.pathname === '/healthz') return sendJson(response, 200, { ok: true, service: 'degen-base-nft-bridge', relayEnabled: config.relayEnabled }, config.corsOrigin);
       if (request.method === 'GET' && (url.pathname === '/health' || url.pathname === '/api/status')) return sendJson(response, 200, await statusService.status(), config.corsOrigin);
