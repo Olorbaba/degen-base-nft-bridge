@@ -2,10 +2,10 @@ import { createPublicClient, createWalletClient, custom, decodeEventLog, formatE
 
 const API_BASE = window.BRIDGE_API_URL || (location.hostname.endsWith('github.io') ? '' : location.origin);
 const proof = {
-  source: { address: '0x61e9c5A6f1f656806e201857B6c08e7a3c14818a', tx: '0x57989161079a3fa8526f5dd8da5e8e0bb3e6f82ec042ad8a32aee32ee1dc59d8', rpc: 'https://ethereum-sepolia-rpc.publicnode.com' },
-  destination: { address: '0xa0A44dEAD4F124B425DeE4466d542DD612D10517', tx: '0x66d3d45c8f2dbac4793d9545346736c7d8e1324f785f18e2217675077c981482', rpc: 'https://base-sepolia-rpc.publicnode.com' },
-  bridgeId: '0x4f3068a25d86478ffd3fa640714861195f9c799e475a7772ea80389da1ec188b',
-  collection: '0x15A9268e3c46c8cE2B11a08148bD27db07B71715', recipient: '0xbFdD3790aBb0768FAe791cf1c551F15Aa7Bb498f', standard: 'ERC-1155', sourceTokenId: '1', mirrorTokenId: '5'
+  source: { address: '0x22A3a63eB8276928Cb5D45f5e67533BCa7D859A6', tx: '0x860660d4bdd7681fcee1f1c931df861629c5f461133961d1fd4c73a6044e10c8', rpc: 'https://rpc.degen.tips' },
+  destination: { address: '0xE08e1ae0e27300882CfF35534cfd5804BFa87697', tx: '0xd635263495bb1adb85ff4f9c59e2362e5b673c0391972c8376cedf604a047898', rpc: 'https://mainnet.base.org' },
+  bridgeId: null,
+  collection: '0x22A3a63eB8276928Cb5D45f5e67533BCa7D859A6', recipient: '0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D', standard: 'Vault deployment', sourceTokenId: '—', mirrorTokenId: '—'
 };
 const sourceAbi = [
   { type: 'function', name: 'bridge', stateMutability: 'nonpayable', inputs: [{ name: 'collection', type: 'address' }, { name: 'tokenId', type: 'uint256' }], outputs: [{ name: 'id', type: 'bytes32' }] },
@@ -48,7 +48,7 @@ setView(location.hash.slice(1) || 'bridge');
 
 async function api(path) { const response = await fetch(`${API_BASE}${path}`, { headers: { accept: 'application/json' } }); if (!response.ok) throw new Error(`API ${response.status}`); return response.json(); }
 function fallbackConfig() {
-  return { bridgeEnabled: false, safetyReason: 'The live testnet relayer API is not connected. Bridge transactions remain disabled.', routeMode: 'public-testnet', source: { name: 'Ethereum Sepolia', chainId: 11155111, currency: 'ETH', rpcUrl: proof.source.rpc, explorerUrl: 'https://sepolia.etherscan.io', vault: proof.source.address }, destination: { name: 'Base Sepolia', chainId: 84532, currency: 'ETH', rpcUrl: proof.destination.rpc, rpcUrls: [proof.destination.rpc, 'https://base-sepolia.drpc.org', 'https://sepolia.base.org'], explorerUrl: 'https://sepolia.basescan.org', mirror: proof.destination.address }, relayer: '0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D' };
+  return { bridgeEnabled: false, safetyReason: 'The production relayer API is not connected. Bridge transactions remain disabled until the operator verifies the service.', routeMode: 'production', source: { name: 'Degen Chain', chainId: 666666666, currency: 'DEGEN', rpcUrl: proof.source.rpc, explorerUrl: 'https://degen.tips', vault: proof.source.address, confirmations: '5' }, destination: { name: 'Base', chainId: 8453, currency: 'ETH', rpcUrl: proof.destination.rpc, rpcUrls: [proof.destination.rpc, 'https://base-rpc.publicnode.com', 'https://base.llamarpc.com'], explorerUrl: 'https://basescan.org', mirror: proof.destination.address, confirmations: '5' }, relayer: proof.recipient };
 }
 async function loadConfig() {
   try { state.config = await api('/api/config'); state.apiOnline = true; setApiIndicator('online', 'API online'); }
@@ -57,6 +57,8 @@ async function loadConfig() {
 }
 function renderConfig() {
   const config = state.config;
+  $('source-network-name').textContent = config.source.name;
+  $('source-chain-id').textContent = config.source.chainId;
   $('destination-network-name').textContent = config.destination.name;
   $('destination-chain-id').textContent = config.destination.chainId;
   $('base-fund-network').textContent = config.destination.name.toUpperCase();
@@ -75,9 +77,9 @@ async function loadStatus(silent = false) {
     const [status, transferPayload] = await Promise.all([api('/api/status'), api('/api/transfers')]);
     state.status = status; state.transfers = transferPayload.transfers || []; state.apiOnline = true; setApiIndicator('online', status.relayEnabled ? 'Relayer online' : 'API online');
   } catch (error) {
-    if (!silent) toast('Live relayer API is not hosted yet. Showing verified static proof.', 'error');
-    state.status = state.status || { queue: { waiting: 0, submitted: 0, completed: 1, failed: 0 }, balances: { degen: '—', eth: '—' }, blocks: {}, runtime: {} };
-    state.transfers = state.transfers.length ? state.transfers : [{ id: proof.bridgeId, sourceCollection: proof.collection, sourceTokenId: proof.sourceTokenId, holder: proof.recipient, tokenStandard: 2, amount: '1', sourceTxHash: proof.source.tx, destinationTxHash: proof.destination.tx, mirrorTokenId: proof.mirrorTokenId, status: 'completed', completedAt: '2026-08-12T20:30:00.000Z' }];
+    if (!silent) toast('The production relayer API is temporarily unavailable.', 'error');
+    state.status = state.status || { queue: { waiting: 0, submitted: 0, completed: 0, failed: 0 }, balances: { degen: '—', eth: '—' }, blocks: {}, runtime: {} };
+    state.transfers = state.transfers.length ? state.transfers : [];
   }
   renderStatus(); renderTransfers();
 }
@@ -167,7 +169,7 @@ async function inspectNft(event) {
     $('nft-name').textContent = metadata.name || `Token #${tokenId}`; $('nft-description').textContent = metadata.description || 'No description supplied.'; $('nft-owner').textContent = short(owner); $('nft-owner').title = owner; $('nft-uri-type').textContent = `${standard} · ${metadata.type}`;
     const media = $('nft-media'); media.innerHTML = '<span>NFT</span>'; if (metadata.image) { const image = document.createElement('img'); image.src = mediaUrl(metadata.image); image.alt = metadata.name || 'NFT preview'; image.onerror = () => image.remove(); media.append(image); }
     $('nft-preview').hidden = false; $('step-inspect').classList.add('complete'); $('step-inspect').classList.remove('current'); $('step-approve').classList.toggle('complete', approved); $('step-approve').classList.toggle('current', !approved); $('step-bridge').classList.toggle('current', approved); updateTransactionAction();
-  } catch (error) { state.nft = null; toast(error.shortMessage || 'Unable to read this NFT on Ethereum Sepolia.', 'error'); }
+  } catch (error) { state.nft = null; toast(error.shortMessage || `Unable to read this NFT on ${state.config?.source?.name || 'Degen Chain'}.`, 'error'); }
   finally { button.disabled = false; button.textContent = 'Inspect NFT'; }
 }
 $('nft-form').addEventListener('submit', inspectNft);
@@ -212,7 +214,7 @@ $('copy-relayer').addEventListener('click', async () => { await navigator.clipbo
 async function copyPreferredBaseRpc() {
   const rpc = state.config?.destination?.rpcUrls?.[0] || state.config?.destination?.rpcUrl || proof.destination.rpc;
   await navigator.clipboard.writeText(rpc);
-  toast('Stable Base Sepolia RPC copied', 'success');
+  toast('Stable Base RPC copied', 'success');
 }
 $('copy-base-rpc').addEventListener('click', () => copyPreferredBaseRpc().catch(() => toast('Copy the displayed RPC URL manually.', 'error')));
 $('repair-base-rpc').addEventListener('click', async () => {
@@ -222,19 +224,19 @@ $('repair-base-rpc').addEventListener('click', async () => {
   try {
     await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [chainParams(chain)] });
     await switchChain(chain);
-    toast('Base Sepolia network submitted with the stable RPC. Retry the transfer.', 'success');
+    toast('Base network submitted with the stable RPC. Retry the transfer.', 'success');
   } catch (error) {
     toast('Your wallet kept its existing RouteMe RPC. Replace it manually using the URL shown below.', 'error');
   }
 });
 
 function wireProof() {
-  $('bridge-id').textContent = short(proof.bridgeId, 10, 8); $('bridge-id').title = proof.bridgeId; $('recipient').textContent = short(proof.recipient); $('recipient').title = proof.recipient;
-  Object.assign($('source-collection'), { textContent: short(proof.collection), href: `https://sepolia.etherscan.io/address/${proof.collection}` }); $('source-tx').href = `https://sepolia.etherscan.io/tx/${proof.source.tx}`; $('destination-tx').href = `https://sepolia.basescan.org/tx/${proof.destination.tx}`;
+  $('bridge-id').textContent = 'Deployment checkpoint'; $('bridge-id').title = 'Production contract deployment'; $('recipient').textContent = short(proof.recipient); $('recipient').title = proof.recipient;
+  Object.assign($('source-collection'), { textContent: short(proof.collection), href: `https://degen.tips/address/${proof.collection}` }); $('source-tx').href = `https://degen.tips/tx/${proof.source.tx}`; $('destination-tx').href = `https://basescan.org/tx/${proof.destination.tx}`;
 }
 $('verify-button').addEventListener('click', async () => {
   const button = $('verify-button'); const output = $('verification-output'); button.disabled = true; button.textContent = 'Verifying…'; output.hidden = true;
-  try { const [sourceClient, destinationClient] = [createPublicClient({ transport: http(proof.source.rpc, { retryCount: 4 }) }), createPublicClient({ transport: http(proof.destination.rpc, { retryCount: 4 }) })]; const [sourceCode, destinationCode, sourceReceipt, destinationReceipt] = await Promise.all([sourceClient.getCode({ address: proof.source.address }), destinationClient.getCode({ address: proof.destination.address }), sourceClient.getTransactionReceipt({ hash: proof.source.tx }), destinationClient.getTransactionReceipt({ hash: proof.destination.tx })]); if (!sourceCode || !destinationCode || sourceReceipt.status !== 'success' || destinationReceipt.status !== 'success') throw new Error('One or more checks failed'); output.hidden = false; output.textContent = `✓ Ethereum Sepolia vault runtime bytecode found\n✓ Source lock confirmed in block ${sourceReceipt.blockNumber}\n✓ Base Sepolia mirror runtime bytecode found\n✓ Destination mint confirmed in block ${destinationReceipt.blockNumber}\n✓ Bridge evidence matches ${proof.bridgeId}`; toast('Deployment verified on both testnets', 'success'); }
+  try { const [sourceClient, destinationClient] = [createPublicClient({ transport: http(proof.source.rpc, { retryCount: 4 }) }), createPublicClient({ transport: http(proof.destination.rpc, { retryCount: 4 }) })]; const [sourceCode, destinationCode, sourceReceipt, destinationReceipt] = await Promise.all([sourceClient.getCode({ address: proof.source.address }), destinationClient.getCode({ address: proof.destination.address }), sourceClient.getTransactionReceipt({ hash: proof.source.tx }), destinationClient.getTransactionReceipt({ hash: proof.destination.tx })]); if (!sourceCode || !destinationCode || sourceReceipt.status !== 'success' || destinationReceipt.status !== 'success') throw new Error('One or more checks failed'); output.hidden = false; output.textContent = `✓ Degen Chain vault runtime bytecode found\n✓ Degen deployment confirmed in block ${sourceReceipt.blockNumber}\n✓ Base mirror runtime bytecode found\n✓ Base deployment confirmed in block ${destinationReceipt.blockNumber}`; toast('Production contracts verified on-chain', 'success'); }
   catch (error) { output.hidden = false; output.textContent = `Public RPC verification is temporarily unavailable. Explorer links remain authoritative.\n\n${error.message}`; toast('A public RPC could not be reached.', 'error'); }
   finally { button.disabled = false; button.textContent = 'Verify on-chain'; }
 });

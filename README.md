@@ -1,8 +1,8 @@
 # Degen → Base one-way NFT bridge
 
-A centralized, one-way ERC-721/ERC-1155 bridge designed for Degen Chain → Base. The public evaluation release uses Ethereum Sepolia → Base Sepolia so judges can safely test the complete workflow with valueless NFTs.
+A centralized, one-way ERC-721/ERC-1155 bridge for Degen Chain → Base. The production contracts are deployed on Degen mainnet and Base mainnet; the relayer remains explicitly safety-locked until its hosted infrastructure and controlled pilot are complete.
 
-> Current release: public two-testnet deployment. Use test NFTs only; the source lock remains permanent by design.
+> Current release: production contracts deployed, relayer locked. Source custody is permanent by design.
 
 Live application and read-only status API: **https://degen-base-nft-bridge.vercel.app**
 
@@ -16,14 +16,14 @@ Live application and read-only status API: **https://degen-base-nft-bridge.verce
 
 Universal NFT burning is impossible because standard ERC-721 and ERC-1155 collections do not expose a common third-party burn function. A non-withdrawable vault provides the requested irreversible, one-way behavior for both standards.
 
-## Test deployment
+## Production deployment
 
 | Component | Network | Address |
 | --- | --- | --- |
-| Source vault | Ethereum Sepolia | `0x61e9c5A6f1f656806e201857B6c08e7a3c14818a` |
-| Destination mirror | Base Sepolia | `0xa0A44dEAD4F124B425DeE4466d542DD612D10517` |
+| Source vault | Degen Chain (`666666666`) | `0x22A3a63eB8276928Cb5D45f5e67533BCa7D859A6` |
+| Destination mirror | Base (`8453`) | `0xE08e1ae0e27300882CfF35534cfd5804BFa87697` |
 
-Controlled tests bridged newly created, valueless ERC-721 and ERC-1155 assets to Base Sepolia. The active proof uses the upgraded dual-standard vault and verifies exact ERC-1155 URI preservation. See [DEPLOYMENT.md](./DEPLOYMENT.md) for transactions, independent verification instructions, security properties, and the Base mainnet rollout plan. Machine-readable addresses are in [deployments.json](./deployments.json).
+The testnet route remains documented as a reference in [deployments.json](./deployments.json). The production vault supports both ERC-721 and ERC-1155 and the Base mirror stores each original URI string on-chain.
 
 ## Install and test
 
@@ -40,12 +40,12 @@ The application includes four operational views:
 
 - **Bridge**: wallet connection, network switching, ERC-721/ERC-1155 inspection, metadata preview, approval, and source deposit.
 - **Transfers**: waiting, submitted, completed, and failed bridge records.
-- **Relayer**: live source and Base Sepolia ETH balances, queue depth, checkpoints, and native-token top-up forms.
+- **Relayer**: live Degen and Base balances, queue depth, checkpoints, and native-token top-up forms.
 - **Proof**: independently verifiable controlled deployment evidence.
 
-The current server-provided configuration enables the public Ethereum Sepolia → Base Sepolia test route. The former Degen-mainnet → Base-Sepolia hybrid route remains retired.
+The server-provided production configuration exposes Degen → Base, but bridge minting is disabled until the Railway service is verified and the operator enables both production safety flags.
 
-If an injected wallet has Base Sepolia saved with the rate-limited RouteMe endpoint, use **Relayer → Repair wallet RPC** and replace the wallet network RPC with `https://base-sepolia-rpc.publicnode.com`. Wallet security prevents a website from silently overwriting an existing saved RPC.
+If an injected wallet has a rate-limited Base RPC saved, use **Relayer → Repair wallet RPC** and replace it with a stable Base mainnet endpoint such as `https://mainnet.base.org`.
 
 Independently verify the live test deployment without a wallet or private key:
 
@@ -59,8 +59,8 @@ Copy `.env.example` to `.env`. Use a dedicated deployer, a low-balance relayer k
 
 Important variables:
 
-- `SOURCE_RPC_URL` / `SOURCE_CHAIN_ID`: current source network (Ethereum Sepolia for evaluation; Degen Chain for production).
-- `SOURCE_VAULT_ADDRESS`: deployed source vault. The current ERC-721/ERC-1155 Sepolia vault is `0x61e9c5A6f1f656806e201857B6c08e7a3c14818a`.
+- `SOURCE_RPC_URL` / `SOURCE_CHAIN_ID`: Degen Chain mainnet (`666666666`).
+- `SOURCE_VAULT_ADDRESS`: `0x22A3a63eB8276928Cb5D45f5e67533BCa7D859A6`.
 - `SOURCE_START_BLOCK`: vault deployment block.
 - `BASE_MIRROR_ADDRESS`: destination mirror.
 - `BASE_RPC_URLS`: optional comma-separated destination RPC failover list used for rate limits and outages.
@@ -82,11 +82,11 @@ The service exposes:
 - `GET /api/status`: balances, queue metrics, blocks, checkpoints, and runtime state.
 - `GET /api/transfers`: indexed transfer records.
 - `GET /api/transfers/:id`: one transfer by bridge ID.
-- `POST /api/relay`: validates a finalized source-vault event and submits its Base Sepolia mint.
+- `POST /api/relay`: validates a finalized source-vault event and submits its Base mint.
 
 A container deployment template with durable state is provided in `compose.example.yml` for the future always-on production relayer.
 
-The test application, live status API, and validated testnet relay trigger are Vercel-compatible. Import this repository into Vercel with the repository root as the project root; `vercel.json` serves the frontend from `docs/` and the serverless endpoints from `api/`. The low-balance testnet relayer key must be stored only in a Vercel Sensitive environment variable.
+The frontend can be served by Vercel or by the Railway process. The relayer key must be stored only in Railway's encrypted variables; it is never part of the frontend or repository.
 
 The Base-mainnet relayer must run as an always-on process with durable state on Railway, Fly.io, a VPS, or equivalent production infrastructure. Store its dedicated key only in that provider's encrypted secrets.
 
@@ -102,8 +102,8 @@ DegenNftVault(vault).bridge(collection, tokenId); // locks one unit
 
 The source transaction is irreversible. Direct safe transfers to the vault are rejected; users must call `bridge` so a canonical record is created.
 
-## Current public test route
+## Testnet reference and production route
 
-Degen's former public testnet is unavailable. To avoid locking real Degen NFTs during evaluation, the public application now uses Ethereum Sepolia as the source and Base Sepolia as the destination. The relay endpoint verifies every bridge ID against a finalized event from the configured source vault before minting.
+Degen's former public testnet is unavailable, so the repository retains a completed Ethereum Sepolia → Base Sepolia run as a safe reference. Production uses the deployed Degen mainnet vault and Base mirror. The relay endpoint verifies every bridge ID against a finalized event from the configured source vault before minting.
 
-For production, deploy `BaseNftMirror` on Base mainnet, switch the destination configuration, complete an independent review, and begin with a capped pilot. See [SECURITY.md](./SECURITY.md).
+Before opening the production route, complete an independent review and a capped pilot. See [SECURITY.md](./SECURITY.md).

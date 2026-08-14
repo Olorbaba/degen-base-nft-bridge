@@ -1,2 +1,3 @@
-// Public status and finalized-event relay API for the two-testnet release.
-window.BRIDGE_API_URL = window.BRIDGE_API_URL || 'https://degen-base-nft-bridge.vercel.app';
+// Railway can serve the app and API from one origin. Set this to the Railway
+// public URL when the frontend is hosted separately.
+window.BRIDGE_API_URL = window.BRIDGE_API_URL || '';

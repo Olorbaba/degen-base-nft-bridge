@@ -27,7 +27,10 @@ export function readConfig(env = process.env) {
     env.BASE_RPC_URLS,
     destinationRpcUrl,
     destinationChainId === 84532 ? 'https://base-sepolia.drpc.org' : null,
-    destinationChainId === 84532 ? 'https://sepolia.base.org' : null
+    destinationChainId === 84532 ? 'https://sepolia.base.org' : null,
+    destinationChainId === 8453 ? 'https://mainnet.base.org' : null,
+    destinationChainId === 8453 ? 'https://base-rpc.publicnode.com' : null,
+    destinationChainId === 8453 ? 'https://base.llamarpc.com' : null
   ]);
   const sourceIsDegen = sourceChainId === 666666666;
   const sourceSymbol = env.SOURCE_CURRENCY_SYMBOL || (sourceIsDegen ? 'DEGEN' : 'ETH');

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Test a one-way NFT bridge from Ethereum Sepolia to Base Sepolia before the Degen Chain production launch.">
+  <meta name="description" content="One-way NFT bridge from Degen Chain to Base with permanent source custody and exact metadata preservation.">
   <title>Degen → Base NFT Bridge</title>
   <link rel="icon" type="image/webp" href="assets/degen.webp">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -39,14 +39,14 @@
 
     <section id="view-bridge" class="view active" data-view="bridge">
       <div class="view-header">
-        <div><p class="eyebrow">PUBLIC TWO-TESTNET DEMO</p><h1>Move an NFT to Base Sepolia</h1><p>Your test NFT is permanently locked on Ethereum Sepolia. A metadata-preserving mirror is minted to the same address on Base Sepolia.</p></div>
+        <div><p class="eyebrow">DEGEN MAINNET → BASE</p><h1>Move an NFT to Base</h1><p>Your NFT is permanently locked on Degen Chain. A metadata-preserving mirror is minted to the same address on Base.</p></div>
         <div id="route-state" class="route-state"><span></span><div><small>ROUTE STATUS</small><strong>Loading</strong></div></div>
       </div>
 
       <div class="bridge-layout">
         <section class="bridge-panel">
           <div class="network-route">
-            <div class="network-box"><img src="assets/ethereum.ico" alt="Ethereum Sepolia"><div><small>FROM</small><strong>Ethereum Sepolia</strong><span>ETH · <code>11155111</code></span></div></div>
+            <div class="network-box"><img src="assets/degen.webp" alt="Degen Chain"><div><small>FROM</small><strong id="source-network-name">Degen Chain</strong><span>DEGEN · <code id="source-chain-id">666666666</code></span></div></div>
             <div class="route-arrow" aria-hidden="true">→</div>
             <div class="network-box"><img src="assets/base.ico" alt="Base"><div><small>TO</small><strong id="destination-network-name">Base</strong><span>ETH · <code id="destination-chain-id">84532</code></span></div></div>
           </div>
@@ -55,7 +55,7 @@
             <div class="field-group">
               <label for="collection-address">NFT contract address</label>
               <div class="input-shell"><input id="collection-address" name="collection" placeholder="0x…" autocomplete="off" spellcheck="false"><button type="button" class="input-action" id="paste-address" title="Paste contract address">Paste</button></div>
-              <p class="field-help">ERC-721 or ERC-1155 collection deployed on Ethereum Sepolia</p>
+              <p class="field-help">ERC-721 or ERC-1155 collection deployed on Degen Chain</p>
             </div>
             <div class="field-group token-field">
               <label for="token-id">Token ID</label>
@@ -71,7 +71,7 @@
 
           <div class="bridge-steps" aria-label="Bridge transaction steps">
             <div id="step-inspect" class="bridge-step current"><span>1</span><div><strong>Inspect</strong><small>Verify ownership and metadata</small></div></div>
-            <div id="step-approve" class="bridge-step"><span>2</span><div><strong>Approve</strong><small>Authorize the Sepolia vault</small></div></div>
+            <div id="step-approve" class="bridge-step"><span>2</span><div><strong>Approve</strong><small>Authorize the Degen vault</small></div></div>
             <div id="step-bridge" class="bridge-step"><span>3</span><div><strong>Bridge</strong><small>Lock NFT and create record</small></div></div>
           </div>
           <button id="transaction-action" class="primary-action" hidden disabled>Connect wallet to continue</button>
@@ -95,21 +95,21 @@
     <section id="view-relayer" class="view" data-view="relayer">
       <div class="view-header"><div><p class="eyebrow">PUBLIC RELAYER</p><h1>Gas and operations</h1><p>The community can monitor and fund the relayer without granting it additional permissions.</p></div><a id="relayer-explorer-link" class="secondary-action" target="_blank" rel="noreferrer">View address</a></div>
       <div class="relayer-overview">
-        <section class="relayer-identity"><small>RELAYER ADDRESS</small><div><code id="relayer-address">—</code><button id="copy-relayer" title="Copy relayer address">Copy</button></div><p>The relayer only spends Base Sepolia gas to mint mirrored NFTs. Source Sepolia ETH is shown for transparency.</p></section>
+        <section class="relayer-identity"><small>RELAYER ADDRESS</small><div><code id="relayer-address">—</code><button id="copy-relayer" title="Copy relayer address">Copy</button></div><p>The relayer spends Base ETH to mint mirrored NFTs. Degen balance is shown for source-side operations and community top-ups.</p></section>
         <section class="queue-card"><small>NFTS WAITING</small><strong id="relayer-waiting">0</strong><span id="relayer-runtime">Status unavailable</span></section>
       </div>
       <div class="funding-grid">
         <article class="fund-card"><div class="fund-network"><img src="assets/base.ico" alt="Base"><div><small id="base-fund-network">BASE</small><strong>ETH gas balance</strong></div></div><div class="balance-value"><strong id="base-balance">—</strong><span>ETH</span></div><div class="balance-bar"><i id="base-balance-bar"></i></div><form class="fund-form" data-chain="base"><label for="base-topup">Top up relayer</label><div><input id="base-topup" inputmode="decimal" placeholder="0.01"><button type="submit">Send ETH</button></div></form><div class="rpc-repair"><span>Wallet RPC rate limited?</span><button id="repair-base-rpc" type="button">Repair wallet RPC</button></div><div id="wallet-rpc-help" class="rpc-help" hidden><strong>Replace RouteMe in your wallet</strong><p>Open wallet Settings → Networks → Base Sepolia, replace the RPC URL below, save, then retry.</p><div><code id="preferred-base-rpc">https://base-sepolia-rpc.publicnode.com</code><button id="copy-base-rpc" type="button">Copy</button></div></div></article>
-        <article class="fund-card"><div class="fund-network"><img src="assets/ethereum.ico" alt="Ethereum Sepolia"><div><small>ETHEREUM SEPOLIA</small><strong>Source ETH balance</strong></div></div><div class="balance-value"><strong id="degen-balance">—</strong><span>ETH</span></div><div class="balance-bar degen-bar"><i id="degen-balance-bar"></i></div><form class="fund-form" data-chain="source"><label for="degen-topup">Top up relayer</label><div><input id="degen-topup" inputmode="decimal" placeholder="0.01"><button type="submit">Send ETH</button></div></form></article>
+        <article class="fund-card"><div class="fund-network"><img src="assets/degen.webp" alt="Degen Chain"><div><small>DEGEN CHAIN</small><strong>Source DEGEN balance</strong></div></div><div class="balance-value"><strong id="degen-balance">—</strong><span>DEGEN</span></div><div class="balance-bar degen-bar"><i id="degen-balance-bar"></i></div><form class="fund-form" data-chain="source"><label for="degen-topup">Top up relayer</label><div><input id="degen-topup" inputmode="decimal" placeholder="1"><button type="submit">Send DEGEN</button></div></form></article>
       </div>
       <section class="operations-panel"><div><small>LAST SUCCESSFUL POLL</small><strong id="last-poll">—</strong></div><div><small>SOURCE CHECKPOINT</small><strong id="source-checkpoint">—</strong></div><div><small>SOURCE BLOCK</small><strong id="source-block">—</strong></div><div><small>DESTINATION BLOCK</small><strong id="destination-block">—</strong></div></section>
     </section>
 
     <section id="view-proof" class="view" data-view="proof">
-      <div class="view-header"><div><p class="eyebrow">DEPLOYMENT EVIDENCE</p><h1>Verified bridge proof</h1><p>Controlled ERC-721 and ERC-1155 assets completed the full Ethereum Sepolia → Base Sepolia route.</p></div><button id="verify-button" class="primary-action compact">Verify on-chain</button></div>
+      <div class="view-header"><div><p class="eyebrow">DEPLOYMENT EVIDENCE</p><h1>Verified production contracts</h1><p>The Degen vault and Base mirror are deployed and independently verifiable. A controlled pilot is required before live relaying is opened.</p></div><button id="verify-button" class="primary-action compact">Verify on-chain</button></div>
       <div class="proof-grid">
-        <article class="proof-nft"><div class="proof-art"><span>1155</span><small>#5</small></div><div><small>MIRRORED ERC-1155 ASSET</small><h2>Sepolia ERC-1155 Test #1</h2><p>Controlled one-way bridge proof using balanceOf, uri, and setApprovalForAll.</p></div></article>
-        <article class="evidence-card"><div><span>Bridge ID</span><code id="bridge-id"></code></div><div><span>Original collection</span><a id="source-collection" target="_blank" rel="noreferrer"></a></div><div><span>Standard / amount</span><strong>ERC-1155 / 1</strong></div><div><span>Original token</span><strong>#1</strong></div><div><span>Mirror token</span><strong>#5</strong></div><div><span>Recipient</span><code id="recipient"></code></div><footer><a id="source-tx" target="_blank" rel="noreferrer">Sepolia transaction</a><a id="destination-tx" target="_blank" rel="noreferrer">Base transaction</a></footer></article>
+        <article class="proof-nft"><div class="proof-art"><span>LIVE</span><small>LOCKED</small></div><div><small>PRODUCTION ROUTE</small><h2>Degen Chain → Base</h2><p>ERC-721 and ERC-1155 source assets are permanently locked and mirrored with their exact URI.</p></div></article>
+        <article class="evidence-card"><div><span>Checkpoint</span><code id="bridge-id"></code></div><div><span>Source vault</span><a id="source-collection" target="_blank" rel="noreferrer"></a></div><div><span>Source standard</span><strong>ERC-721 / ERC-1155</strong></div><div><span>Source custody</span><strong>Permanent</strong></div><div><span>Destination</span><strong>Base ERC-721 mirror</strong></div><div><span>Relayer</span><code id="recipient"></code></div><footer><a id="source-tx" target="_blank" rel="noreferrer">Degen deployment</a><a id="destination-tx" target="_blank" rel="noreferrer">Base deployment</a></footer></article>
       </div>
       <div id="verification-output" class="verification-output" hidden></div>
       <div class="architecture-strip"><article><span>01</span><strong>Detect</strong><p>The vault identifies exactly one supported standard: ERC-721 or ERC-1155.</p></article><article><span>02</span><strong>Lock</strong><p>It stores collection, token ID, holder, standard, amount, timestamp, and URI.</p></article><article><span>03</span><strong>Mint</strong><p>The relayer mints one Base ERC-721 mirror with the exact metadata.</p></article></div>
