@@ -75,7 +75,7 @@
           <section class="nft-picker" aria-label="Wallet NFT picker">
             <button id="toggle-nft-picker" class="picker-toggle" type="button" aria-expanded="false" aria-controls="nft-picker-panel"><span aria-hidden="true">+</span><span>Choose an NFT from this wallet</span></button>
             <div id="nft-picker-panel" class="nft-picker-panel" hidden>
-              <div class="picker-toolbar"><div><strong>Wallet NFTs</strong><small>Discovery is read-only. The bridge still verifies the asset directly on Degen Chain.</small></div><button id="refresh-nft-picker" class="picker-refresh" type="button">Refresh</button></div>
+              <div class="picker-toolbar"><div><strong>Wallet NFTs</strong><small>Discovery is read-only and sends your public wallet address to the bridge API and Degen Explorer. Assets are still verified directly on-chain.</small></div><button id="refresh-nft-picker" class="picker-refresh" type="button">Refresh</button></div>
               <label class="picker-search" for="nft-picker-search"><span>Search collection or NFT</span><input id="nft-picker-search" type="search" placeholder="Search by name" autocomplete="off"></label>
               <div id="nft-picker-status" class="picker-status" role="status">Connect a wallet to load NFTs.</div>
               <div id="nft-picker-list" class="nft-picker-list"></div>
@@ -91,7 +91,7 @@
 
           <div class="bridge-steps" aria-label="Bridge transaction steps">
             <div id="step-inspect" class="bridge-step current"><span>1</span><div><strong>Inspect</strong><small>Verify ownership and metadata</small></div></div>
-            <div id="step-approve" class="bridge-step"><span>2</span><div><strong>Approve</strong><small>Authorize the Degen vault</small></div></div>
+            <div id="step-approve" class="bridge-step"><span>2</span><div><strong>Approve</strong><small>ERC-721 token or ERC-1155 collection</small></div></div>
             <div id="step-bridge" class="bridge-step"><span>3</span><div><strong>Bridge</strong><small>Lock NFT and create record</small></div></div>
           </div>
           <button id="transaction-action" class="primary-action" hidden disabled>Connect wallet to continue</button>

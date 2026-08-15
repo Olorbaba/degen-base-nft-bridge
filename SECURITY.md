@@ -2,21 +2,23 @@
 
 ## Current status
 
-The contracts are deployed and the controlled cross-chain test passed. The relayer is intentionally offline and hybrid relaying is locked because the source is Degen mainnet and the destination is Base Sepolia.
+The Degen mainnet vault and Base mainnet mirror are deployed. The Railway relayer is configured for the production route and remains guarded by explicit operator flags, finalized-source confirmations, source-custody checks, metadata and gas limits, and duplicate-mint protection.
 
-Do not deposit an NFT into the Degen vault for normal use. Deposits are irreversible.
+Deposits are irreversible. A source NFT is permanently held by the vault and there is no withdrawal path. Users must verify the recipient wallet and destination network before signing.
 
-The frontend obtains `bridgeEnabled` from `/api/config` and rechecks it immediately before approval or bridge transactions. The current proof configuration keeps those controls disabled while leaving read-only status and relayer funding available.
+The frontend rechecks the server route immediately before every approval, bridge, and relayer-funding transaction. It accepts only the audited production route or the retained Ethereum Sepolia → Base Sepolia reference route. Wallet NFT discovery is read-only and sends only the public wallet address to the configured Degen Explorer endpoint.
 
 ## Trust model
 
-The source lock is enforced on-chain. Destination minting is centralized: the configured relayer decides which source records are minted. On-chain replay protection prevents the same bridge record from being minted twice, but users must trust the relayer to remain available and faithfully relay eligible records.
+Destination minting is centralized: the configured relayer decides when an eligible, finalized source record is submitted. The Base mirror enforces one mint per bridge ID and stores the event URI exactly as recorded by the source vault. The relayer verifies ERC-721 `ownerOf` or ERC-1155 `balanceOf` custody at the source event block before minting.
 
-## Production requirements
+The operator key and private RPC URLs belong only in Railway encrypted variables. Public API responses contain only browser-safe RPC endpoints and sanitized operational errors. Failed transfers are isolated, recorded, and retryable without skipping the source checkpoint.
 
-- Deploy the mirror to Base mainnet.
-- Move mirror ownership to a multisig.
-- Use a dedicated, replaceable relayer key with limited gas funds.
-- Persist relayer state on durable storage and alert on stalled or reverted transfers.
-- Pin or archive external metadata; an unchanged URI does not guarantee immutable content.
-- Complete an independent smart-contract and operational security review.
+## Operational requirements
+
+- Keep the relayer key dedicated, replaceable, and funded only for expected gas.
+- Move Base mirror ownership to a multisig before broad public usage.
+- Persist relayer state on durable storage and alert on stalled, reverted, or repeatedly rejected transfers.
+- Keep metadata size and mint gas limits appropriate for the supported collections.
+- Pin or archive external metadata when application-level immutability is required; preserving a URI does not guarantee that the URI's content never changes.
+- Complete an independent smart-contract and operational review before handling high-value assets.

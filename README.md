@@ -12,7 +12,7 @@ Retained Ethereum Sepolia → Base Sepolia demo: **https://degen-base-nft-bridge
 
 1. A holder approves `DegenNftVault` and calls `bridge(collection, tokenId)`.
 2. The vault permanently custodies the NFT, snapshots its URI, appends its details to an on-chain array, and emits `NFTBridged`.
-3. The relayer waits for source confirmations and reads the event plus `tokenURI` (ERC-721) or `uri` (ERC-1155) at the finalized source block.
+3. The relayer waits for source confirmations and treats the URI captured in the finalized `NFTBridged` event as canonical. It verifies that the vault still has custody of the source asset before minting.
 4. The relayer calls `BaseNftMirror.mintFromDegen`, minting the URI to the original holder.
 5. The Base contract records the Degen origin and rejects duplicate bridge IDs.
 
@@ -67,8 +67,10 @@ Important variables:
 - `SOURCE_START_BLOCK`: vault deployment block.
 - `BASE_MIRROR_ADDRESS`: destination mirror.
 - `BASE_RPC_URLS`: optional comma-separated destination RPC failover list used for rate limits and outages.
+- `PUBLIC_SOURCE_RPC_URL` / `PUBLIC_BASE_RPC_URLS`: browser-safe RPC endpoints. Keep operator RPC URLs private when they differ.
 - `RELAYER_PRIVATE_KEY`: destination mint-authority key.
 - `SOURCE_CONFIRMATIONS` / `DESTINATION_CONFIRMATIONS`: finality delays.
+- `MAX_TOKEN_URI_BYTES` / `MAX_MINT_GAS`: relayer bounds that reject unusually large metadata or expensive mints without stopping later queue items.
 - `STATE_FILE`: durable relayer checkpoint and transfer state.
 
 Preflight and start:

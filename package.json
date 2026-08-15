@@ -10,7 +10,8 @@
     "verify:deployment": "node scripts/verify-deployment.mjs",
     "test:controlled:1155": "node scripts/controlled-test-1155.mjs",
     "test": "node --test test/*.test.js",
-    "build": "forge build"
+    "build:frontend": "esbuild src/browserViem.js --bundle --format=esm --platform=browser --target=es2020 --outfile=docs/vendor/viem.js --minify",
+    "build": "npm run build:frontend && forge build"
   },
   "dependencies": {
     "@openzeppelin/contracts": "5.4.0",
@@ -18,6 +19,7 @@
     "viem": "^2.50.4"
   },
   "devDependencies": {
+    "esbuild": "^0.25.0",
     "playwright": "^1.62.1"
   }
 }

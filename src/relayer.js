@@ -8,6 +8,7 @@ import { createPublicClient, createWalletClient, defineChain, fallback, formatEt
 import { sourceAbi, mirrorAbi, erc721MetadataAbi, erc1155MetadataAbi } from './abis.js';
 import { loadState, saveState } from './state.js';
 import { discoverOwnedNfts, NftDiscoveryError } from './nftDiscovery.js';
+import { applySecurityHeaders, createRateLimiter, requestClientKey } from './httpSecurity.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const docsRoot = path.resolve(here, '../docs');
@@ -24,6 +25,14 @@ export function readConfig(env = process.env) {
   const destinationRpcUrl = env.BASE_RPC_URL || 'https://base-sepolia-rpc.publicnode.com';
   const sourceChainId = Number(env.SOURCE_CHAIN_ID || env.DEGEN_CHAIN_ID || 11155111);
   const destinationChainId = Number(env.BASE_CHAIN_ID || 84532);
+  const sourceIsDegen = sourceChainId === 666666666;
+  const publicSourceRpcUrl = env.PUBLIC_SOURCE_RPC_URL || (sourceIsDegen ? 'https://rpc.degen.tips' : 'https://ethereum-sepolia-rpc.publicnode.com');
+  const publicDestinationRpcUrls = uniqueUrls([
+    env.PUBLIC_BASE_RPC_URLS,
+    destinationChainId === 8453 ? 'https://mainnet.base.org' : 'https://base-sepolia-rpc.publicnode.com',
+    destinationChainId === 8453 ? 'https://base-rpc.publicnode.com' : 'https://base-sepolia.drpc.org',
+    destinationChainId === 8453 ? 'https://base.llamarpc.com' : 'https://sepolia.base.org'
+  ]);
   const destinationRpcUrls = uniqueUrls([
     env.BASE_RPC_URLS,
     destinationRpcUrl,
@@ -33,7 +42,6 @@ export function readConfig(env = process.env) {
     destinationChainId === 8453 ? 'https://base-rpc.publicnode.com' : null,
     destinationChainId === 8453 ? 'https://base.llamarpc.com' : null
   ]);
-  const sourceIsDegen = sourceChainId === 666666666;
   const sourceSymbol = env.SOURCE_CURRENCY_SYMBOL || (sourceIsDegen ? 'DEGEN' : 'ETH');
   const sourceName = env.SOURCE_CHAIN_NAME || (sourceIsDegen ? 'Degen Chain' : sourceChainId === 11155111 ? 'Ethereum Sepolia' : `Source chain ${sourceChainId}`);
   const sourceExplorerUrl = env.SOURCE_EXPLORER_URL || (sourceIsDegen ? 'https://explorer.degen.tips' : '');
@@ -61,7 +69,7 @@ export function readConfig(env = process.env) {
       : 'Relaying is disabled by the operator.';
 
   return {
-    sourceChain, destinationChain, sourceRpcUrl, destinationRpcUrl, destinationRpcUrls, sourceExplorerUrl, account, relayerAddress,
+    sourceChain, destinationChain, sourceRpcUrl, destinationRpcUrl, destinationRpcUrls, publicSourceRpcUrl, publicDestinationRpcUrls, sourceExplorerUrl, account, relayerAddress,
     sourceVault: address(env.SOURCE_VAULT_ADDRESS, 'SOURCE_VAULT_ADDRESS'),
     mirror: address(env.BASE_MIRROR_ADDRESS, 'BASE_MIRROR_ADDRESS'),
     sourceStartBlock: BigInt(env.SOURCE_START_BLOCK || 0),
@@ -72,6 +80,8 @@ export function readConfig(env = process.env) {
     port: n(env, 'PORT', 8787),
     corsOrigin: env.CORS_ORIGIN || '*',
     publicAppUrl: env.PUBLIC_APP_URL || '',
+    maxTokenUriBytes: BigInt(n(env, 'MAX_TOKEN_URI_BYTES', 16_384)),
+    maxMintGas: BigInt(n(env, 'MAX_MINT_GAS', 8_000_000)),
     relayEnabled, requestedRelay, hybridRoute, degenMainnetAllowed, safetyReason
   };
 }
@@ -88,7 +98,56 @@ export function createRpcTransport(urls, transportFactory = viemHttp) {
   })), { retryCount: 1, retryDelay: 750 });
 }
 
+class TransferRejectedError extends Error {
+  constructor(message, code = 'transfer_rejected') {
+    super(message);
+    this.name = 'TransferRejectedError';
+    this.code = code;
+  }
+}
+
+function transferFromLog(log) {
+  const args = log.args;
+  return {
+    id: args.id,
+    sourceCollection: args.collection,
+    sourceTokenId: args.tokenId.toString(),
+    holder: args.holder,
+    tokenStandard: Number(args.tokenStandard),
+    amount: args.amount.toString(),
+    tokenUri: args.tokenUri,
+    sourceBlock: log.blockNumber.toString(),
+    sourceTxHash: log.transactionHash,
+    status: 'discovered',
+    discoveredAt: new Date().toISOString()
+  };
+}
+
+function logFromTransfer(transfer) {
+  return {
+    blockNumber: BigInt(transfer.sourceBlock),
+    transactionHash: transfer.sourceTxHash,
+    args: {
+      id: transfer.id,
+      collection: transfer.sourceCollection,
+      tokenId: BigInt(transfer.sourceTokenId),
+      holder: transfer.holder,
+      tokenStandard: transfer.tokenStandard,
+      amount: BigInt(transfer.amount),
+      tokenUri: transfer.tokenUri,
+      timestamp: 0n
+    }
+  };
+}
+
+function publicTransferFailure(error) {
+  if (error instanceof TransferRejectedError) return { code: error.code, message: 'Transfer requires operator review before it can be minted.' };
+  return { code: 'relay_failed', message: 'Transfer requires operator review before it can be minted.' };
+}
+
 export function createRelayer(config, clients = {}) {
+  const maxTokenUriBytes = config.maxTokenUriBytes ?? 16_384n;
+  const maxMintGas = config.maxMintGas ?? 8_000_000n;
   const destinationTransport = createRpcTransport(config.destinationRpcUrls || [config.destinationRpcUrl]);
   const source = clients.source || createPublicClient({ chain: config.sourceChain, transport: viemHttp(config.sourceRpcUrl, { retryCount: 5 }) });
   const destination = clients.destination || createPublicClient({ chain: config.destinationChain, transport: destinationTransport });
@@ -141,27 +200,26 @@ export function createRelayer(config, clients = {}) {
     const id = args.id;
     const existing = state.transfers[id];
     if (existing?.status === 'completed') return;
-    const transfer = existing || (state.transfers[id] = {
-      id,
-      sourceCollection: args.collection,
-      sourceTokenId: args.tokenId.toString(),
-      holder: args.holder,
-      tokenStandard: Number(args.tokenStandard),
-      amount: args.amount.toString(),
-      sourceBlock: log.blockNumber.toString(),
-      sourceTxHash: log.transactionHash,
-      status: 'discovered',
-      discoveredAt: new Date().toISOString()
-    });
+    const transfer = existing || (state.transfers[id] = transferFromLog(log));
 
     if (transfer.status === 'submitted') return;
-    let uri = args.tokenUri;
-    try {
-      const metadataAbi = Number(args.tokenStandard) === 2 ? erc1155MetadataAbi : erc721MetadataAbi;
-      const metadataFunction = Number(args.tokenStandard) === 2 ? 'uri' : 'tokenURI';
-      uri = await source.readContract({ address: args.collection, abi: metadataAbi, functionName: metadataFunction, args: [args.tokenId], blockNumber: log.blockNumber });
-    } catch { /* use the vault's event snapshot */ }
+    transfer.status = 'discovered';
+    delete transfer.error;
+    delete transfer.errorCode;
+    const uri = args.tokenUri;
+    if (typeof uri !== 'string') throw new TransferRejectedError('source metadata URI is not a string', 'invalid_metadata');
+    if (BigInt(Buffer.byteLength(uri, 'utf8')) > maxTokenUriBytes) throw new TransferRejectedError(`metadata URI exceeds ${maxTokenUriBytes} bytes`, 'metadata_too_large');
     transfer.tokenUri = uri;
+
+    if (Number(args.tokenStandard) === 1) {
+      const owner = await source.readContract({ address: args.collection, abi: erc721MetadataAbi, functionName: 'ownerOf', args: [args.tokenId], blockNumber: log.blockNumber });
+      if (String(owner).toLowerCase() !== config.sourceVault.toLowerCase()) throw new TransferRejectedError('source vault does not custody the ERC-721 at the finalized block', 'source_custody_missing');
+    } else if (Number(args.tokenStandard) === 2) {
+      const balance = await source.readContract({ address: args.collection, abi: erc1155MetadataAbi, functionName: 'balanceOf', args: [config.sourceVault, args.tokenId], blockNumber: log.blockNumber });
+      if (balance < args.amount) throw new TransferRejectedError('source vault does not custody the ERC-1155 amount at the finalized block', 'source_custody_missing');
+    } else {
+      throw new TransferRejectedError('unsupported source token standard', 'unsupported_standard');
+    }
 
     const alreadyMinted = await destination.readContract({ address: config.mirror, abi: mirrorAbi, functionName: 'tokenIdForBridgeId', args: [id] });
     if (alreadyMinted !== 0n) {
@@ -172,10 +230,40 @@ export function createRelayer(config, clients = {}) {
     }
     if (!config.relayEnabled) return;
 
-    const hash = await wallet.writeContract({ address: config.mirror, abi: mirrorAbi, functionName: 'mintFromDegen', args: [id, args.holder, args.collection, args.tokenId, uri] });
+    let estimatedGas;
+    if (typeof destination.estimateContractGas === 'function') {
+      try {
+        estimatedGas = await destination.estimateContractGas({ account: config.account.address, address: config.mirror, abi: mirrorAbi, functionName: 'mintFromDegen', args: [id, args.holder, args.collection, args.tokenId, uri] });
+      } catch (error) {
+        throw new TransferRejectedError(`destination mint simulation failed: ${error.message}`, 'destination_simulation_failed');
+      }
+      if (estimatedGas > maxMintGas) throw new TransferRejectedError(`destination mint estimate exceeds ${maxMintGas} gas`, 'mint_gas_limit');
+    }
+    const hash = await wallet.writeContract({ address: config.mirror, abi: mirrorAbi, functionName: 'mintFromDegen', args: [id, args.holder, args.collection, args.tokenId, uri], ...(estimatedGas ? { gas: estimatedGas } : {}) });
     transfer.destinationTxHash = hash;
     transfer.status = 'submitted';
     transfer.submittedAt = new Date().toISOString();
+  }
+
+  function markTransferError(log, error) {
+    const transfer = state.transfers[log.args.id] || (state.transfers[log.args.id] = transferFromLog(log));
+    transfer.status = 'error';
+    transfer.errorCode = publicTransferFailure(error).code;
+    transfer.error = publicTransferFailure(error).message;
+    transfer.failedAt = new Date().toISOString();
+    console.error(`[relayer] transfer ${log.args.id} rejected: ${error.stack || error.message}`);
+  }
+
+  async function retry(bridgeId) {
+    const transfer = state.transfers[bridgeId];
+    if (!transfer || transfer.status === 'completed' || transfer.status === 'submitted') return transfer || null;
+    try {
+      await processTransfer(logFromTransfer(transfer));
+    } catch (error) {
+      markTransferError(logFromTransfer(transfer), error);
+    }
+    await saveState(config.stateFile, state);
+    return state.transfers[bridgeId];
   }
 
   async function poll() {
@@ -191,7 +279,10 @@ export function createRelayer(config, clients = {}) {
       if (from <= finalized) {
         const to = from + 1_999n < finalized ? from + 1_999n : finalized;
         const logs = await source.getLogs({ address: config.sourceVault, event: bridgeEvent, fromBlock: from, toBlock: to });
-        for (const log of logs) await processTransfer(log);
+        for (const log of logs) {
+          try { await processTransfer(log); }
+          catch (error) { markTransferError(log, error); }
+        }
         state.nextBlock = (to + 1n).toString();
       }
       await saveState(config.stateFile, state);
@@ -212,7 +303,7 @@ export function createRelayer(config, clients = {}) {
 
   function snapshot() { return state || { version: 1, nextBlock: config.sourceStartBlock.toString(), transfers: {} }; }
   function runtime() { return { running, lastPollAt, lastSuccessfulPollAt, lastError }; }
-  return { start, poll, snapshot, runtime, processTransfer, clients: { source, destination } };
+  return { start, poll, retry, snapshot, runtime, processTransfer, clients: { source, destination } };
 }
 
 function transferList(snapshot) {
@@ -221,13 +312,15 @@ function transferList(snapshot) {
 
 export function createStatusService(config, relayer) {
   async function publicConfig() {
+    const publicSourceRpcUrl = config.publicSourceRpcUrl || config.sourceRpcUrl;
+    const publicDestinationRpcUrls = config.publicDestinationRpcUrls || config.destinationRpcUrls || [config.destinationRpcUrl];
     return {
       appName: 'Degen → Base NFT Bridge',
       bridgeEnabled: config.relayEnabled,
       safetyReason: config.safetyReason,
       routeMode: config.hybridRoute ? 'controlled-test' : 'production',
-      source: { name: config.sourceChain.name, chainId: config.sourceChain.id, currency: config.sourceChain.nativeCurrency.symbol, rpcUrl: config.sourceRpcUrl, explorerUrl: config.sourceChain.id === 11155111 ? 'https://sepolia.etherscan.io' : 'https://explorer.degen.tips', vault: config.sourceVault, confirmations: config.sourceConfirmations.toString() },
-      destination: { name: config.destinationChain.name, chainId: config.destinationChain.id, currency: 'ETH', rpcUrl: config.destinationRpcUrls?.[0] || config.destinationRpcUrl, rpcUrls: config.destinationRpcUrls || [config.destinationRpcUrl], explorerUrl: config.destinationChain.id === 8453 ? 'https://basescan.org' : 'https://sepolia.basescan.org', mirror: config.mirror, confirmations: config.destinationConfirmations.toString() },
+      source: { name: config.sourceChain.name, chainId: config.sourceChain.id, currency: config.sourceChain.nativeCurrency.symbol, rpcUrl: publicSourceRpcUrl, explorerUrl: config.sourceChain.id === 11155111 ? 'https://sepolia.etherscan.io' : 'https://explorer.degen.tips', vault: config.sourceVault, confirmations: config.sourceConfirmations.toString() },
+      destination: { name: config.destinationChain.name, chainId: config.destinationChain.id, currency: 'ETH', rpcUrl: publicDestinationRpcUrls[0], rpcUrls: publicDestinationRpcUrls, explorerUrl: config.destinationChain.id === 8453 ? 'https://basescan.org' : 'https://sepolia.basescan.org', mirror: config.mirror, confirmations: config.destinationConfirmations.toString() },
       relayer: config.relayerAddress,
       publicAppUrl: config.publicAppUrl
     };
@@ -251,7 +344,7 @@ export function createStatusService(config, relayer) {
     const depositCount = value(2, BigInt(transfers.length));
     const sourceBlock = value(3, null);
     const destinationBlock = value(4, null);
-    const errors = checks.flatMap((check, index) => check.status === 'rejected' ? [{ check: ['sourceBalance', 'destinationBalance', 'depositCount', 'sourceBlock', 'destinationBlock'][index], message: check.reason?.message || String(check.reason) }] : []);
+    const errors = checks.flatMap((check, index) => check.status === 'rejected' ? [{ check: ['sourceBalance', 'destinationBalance', 'depositCount', 'sourceBlock', 'destinationBlock'][index], message: 'Temporarily unavailable.' }] : []);
     const indexed = BigInt(transfers.length);
     const notIndexed = depositCount > indexed ? depositCount - indexed : 0n;
     return {
@@ -263,7 +356,7 @@ export function createStatusService(config, relayer) {
       queue: { waiting: counts.discovered + counts.error + Number(notIndexed), discovered: counts.discovered, submitted: counts.submitted, completed: counts.completed, failed: counts.error, notIndexed: Number(notIndexed), totalDeposits: depositCount.toString() },
       balances: { address: config.relayerAddress, degen: sourceBalance === null ? null : formatEther(sourceBalance), eth: destinationBalance === null ? null : formatEther(destinationBalance) },
       blocks: { source: sourceBlock?.toString() || null, destination: destinationBlock?.toString() || null, nextSourceBlock: snapshot.nextBlock },
-      runtime: relayer.runtime(),
+      runtime: { ...relayer.runtime(), lastError: relayer.runtime().lastError ? 'The latest relayer poll failed. The operator has been notified.' : null },
       updatedAt: new Date().toISOString()
     };
   }
@@ -272,8 +365,9 @@ export function createStatusService(config, relayer) {
   return { publicConfig, status, transfers };
 }
 
-const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json; charset=utf-8' };
+const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json; charset=utf-8' };
 function sendJson(response, status, value, corsOrigin) {
+  applySecurityHeaders((name, value) => response.setHeader(name, value));
   response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': corsOrigin, 'cache-control': 'no-store' });
   response.end(JSON.stringify(value));
 }
@@ -290,8 +384,13 @@ async function readJsonBody(request, maxBytes = 4096) {
 export async function relayById(relayer, statusService, bridgeId) {
   if (!/^0x[0-9a-fA-F]{64}$/.test(bridgeId || '')) return { statusCode: 400, body: { error: 'invalid bridge ID' } };
   await relayer.poll();
-  const transfer = statusService.transfers().find(item => item.id.toLowerCase() === bridgeId.toLowerCase());
+  let transfer = statusService.transfers().find(item => item.id.toLowerCase() === bridgeId.toLowerCase());
+  if (transfer?.status === 'error' && relayer.retry) {
+    await relayer.retry(transfer.id);
+    transfer = statusService.transfers().find(item => item.id.toLowerCase() === bridgeId.toLowerCase());
+  }
   if (!transfer) return { statusCode: 202, body: { status: 'accepted', bridgeId, message: 'Waiting for source confirmations and the next relayer poll.' } };
+  if (transfer.status === 'error') return { statusCode: 409, body: { status: 'error', bridgeId, error: transfer.error || 'Transfer requires operator review.' } };
   return {
     statusCode: transfer.status === 'completed' ? 200 : 202,
     body: {
@@ -304,14 +403,18 @@ export async function relayById(relayer, statusService, bridgeId) {
 }
 
 export function createHttpServer(relayer, config, statusService = createStatusService(config, relayer)) {
+  const relayRateLimit = createRateLimiter({ max: 12 });
+  const nftRateLimit = createRateLimiter({ max: 60 });
   return http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url, 'http://localhost');
       if (request.method === 'OPTIONS') {
+        applySecurityHeaders((name, value) => response.setHeader(name, value));
         response.writeHead(204, { 'access-control-allow-origin': config.corsOrigin, 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type' });
         response.end(); return;
       }
       if (request.method === 'POST' && url.pathname === '/api/relay') {
+        if (!relayRateLimit(requestClientKey(request))) return sendJson(response, 429, { error: 'Too many relay requests. Please wait before retrying.' }, config.corsOrigin);
         const { bridgeId } = await readJsonBody(request);
         const result = await relayById(relayer, statusService, bridgeId);
         return sendJson(response, result.statusCode, result.body, config.corsOrigin);
@@ -320,6 +423,7 @@ export function createHttpServer(relayer, config, statusService = createStatusSe
       if (request.method === 'GET' && (url.pathname === '/health' || url.pathname === '/api/status')) return sendJson(response, 200, await statusService.status(), config.corsOrigin);
       if (request.method === 'GET' && url.pathname === '/api/config') return sendJson(response, 200, await statusService.publicConfig(), config.corsOrigin);
       if (request.method === 'GET' && url.pathname === '/api/nfts') {
+        if (!nftRateLimit(requestClientKey(request))) return sendJson(response, 429, { error: 'Too many NFT discovery requests. Please wait before retrying.' }, config.corsOrigin);
         const result = await discoverOwnedNfts({ owner: url.searchParams.get('owner'), sourceChainId: config.sourceChain.id, explorerUrl: config.sourceExplorerUrl, cursor: url.searchParams.get('cursor'), limit: url.searchParams.get('limit') });
         return sendJson(response, 200, result, config.corsOrigin);
       }
@@ -335,11 +439,13 @@ export function createHttpServer(relayer, config, statusService = createStatusSe
       const file = path.resolve(docsRoot, requested);
       if (!file.startsWith(`${docsRoot}${path.sep}`) && file !== path.join(docsRoot, 'index.html')) return sendJson(response, 403, { error: 'forbidden' }, config.corsOrigin);
       if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return sendJson(response, 404, { error: 'not found' }, config.corsOrigin);
+      applySecurityHeaders((name, value) => response.setHeader(name, value));
       response.writeHead(200, { 'content-type': contentTypes[path.extname(file)] || 'application/octet-stream', 'cache-control': path.extname(file) === '.html' ? 'no-cache' : 'public, max-age=300' });
       fs.createReadStream(file).pipe(response);
     } catch (error) {
       if (error instanceof NftDiscoveryError) return sendJson(response, error.statusCode, { error: error.message, code: error.code }, config.corsOrigin);
-      sendJson(response, 500, { error: 'internal server error', message: error.message }, config.corsOrigin);
+      console.error(`[http] ${error.stack || error.message}`);
+      sendJson(response, 500, { error: 'internal server error' }, config.corsOrigin);
     }
   });
 }

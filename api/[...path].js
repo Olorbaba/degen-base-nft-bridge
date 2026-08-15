@@ -1,7 +1,8 @@
 import { createPublicClient, createWalletClient, defineChain, fallback, formatEther, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { sourceAbi, mirrorAbi } from '../src/abis.js';
+import { sourceAbi, mirrorAbi, erc721MetadataAbi, erc1155MetadataAbi } from '../src/abis.js';
 import { discoverOwnedNfts, NftDiscoveryError } from '../src/nftDiscovery.js';
+import { applySecurityHeaders, createRateLimiter, requestClientKey } from '../src/httpSecurity.js';
 
 const DEFAULTS = {
   sourceRpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
@@ -33,12 +34,21 @@ const config = {
   destinationConfirmations: BigInt(env('DESTINATION_CONFIRMATIONS', DEFAULTS.destinationConfirmations))
 };
 config.sourceExplorerUrl = env('SOURCE_EXPLORER_URL', config.sourceChainId === 666666666 ? 'https://explorer.degen.tips' : '');
+config.publicSourceRpcUrl = env('PUBLIC_SOURCE_RPC_URL', config.sourceChainId === 666666666 ? 'https://rpc.degen.tips' : 'https://ethereum-sepolia-rpc.publicnode.com');
 config.destinationRpcUrls = uniqueUrls([
   env('BASE_RPC_URLS', ''),
   config.destinationRpcUrl,
-  'https://base-sepolia.drpc.org',
-  'https://sepolia.base.org'
+  config.destinationChainId === 8453 ? 'https://mainnet.base.org' : 'https://base-sepolia.drpc.org',
+  config.destinationChainId === 8453 ? 'https://base-rpc.publicnode.com' : 'https://sepolia.base.org'
 ]);
+config.publicDestinationRpcUrls = uniqueUrls([
+  env('PUBLIC_BASE_RPC_URLS', ''),
+  config.destinationChainId === 8453 ? 'https://mainnet.base.org' : 'https://base-sepolia-rpc.publicnode.com',
+  config.destinationChainId === 8453 ? 'https://base-rpc.publicnode.com' : 'https://base-sepolia.drpc.org',
+  config.destinationChainId === 8453 ? 'https://base.llamarpc.com' : 'https://sepolia.base.org'
+]);
+config.maxTokenUriBytes = BigInt(env('MAX_TOKEN_URI_BYTES', 16_384));
+config.maxMintGas = BigInt(env('MAX_MINT_GAS', 8_000_000));
 
 const rpcTransport = urls => fallback(urls.map((url, index) => http(url, {
   key: `rpc-${index}`,
@@ -48,8 +58,8 @@ const rpcTransport = urls => fallback(urls.map((url, index) => http(url, {
   timeout: 20_000
 })), { retryCount: 1, retryDelay: 750 });
 
-const sourceChain = defineChain({ id: config.sourceChainId, name: 'Ethereum Sepolia', nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [config.sourceRpcUrl] } } });
-const destinationChain = defineChain({ id: config.destinationChainId, name: 'Base Sepolia', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: config.destinationRpcUrls } } });
+const sourceChain = defineChain({ id: config.sourceChainId, name: config.sourceChainId === 666666666 ? 'Degen Chain' : 'Ethereum Sepolia', nativeCurrency: { name: config.sourceChainId === 666666666 ? 'DEGEN' : 'Sepolia Ether', symbol: config.sourceChainId === 666666666 ? 'DEGEN' : 'ETH', decimals: 18 }, rpcUrls: { default: { http: [config.sourceRpcUrl] } } });
+const destinationChain = defineChain({ id: config.destinationChainId, name: config.destinationChainId === 8453 ? 'Base' : 'Base Sepolia', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: config.destinationRpcUrls } } });
 const source = createPublicClient({ chain: sourceChain, transport: http(config.sourceRpcUrl, { retryCount: 3, timeout: 25_000 }) });
 const destinationTransport = rpcTransport(config.destinationRpcUrls);
 const destination = createPublicClient({ chain: destinationChain, transport: destinationTransport });
@@ -59,14 +69,16 @@ const privateKey = /^0x[0-9a-fA-F]{64}$/.test(process.env.RELAYER_PRIVATE_KEY ||
 const account = privateKey ? privateKeyToAccount(privateKey) : null;
 const testnetRoute = config.sourceChainId === 11155111 && config.destinationChainId === 84532;
 const relayEnabled = testnetRoute && account?.address.toLowerCase() === config.relayer.toLowerCase();
+const relayRateLimit = createRateLimiter({ max: 12 });
+const nftRateLimit = createRateLimiter({ max: 60 });
 
 function publicConfig() {
   return {
     appName: 'Degen → Base NFT Bridge', bridgeEnabled: relayEnabled,
     safetyReason: relayEnabled ? null : 'The testnet relayer is temporarily unavailable. New deposits are disabled.',
     routeMode: 'public-testnet',
-    source: { name: sourceChain.name, chainId: sourceChain.id, currency: 'ETH', rpcUrl: config.sourceRpcUrl, explorerUrl: 'https://sepolia.etherscan.io', vault: config.sourceVault, confirmations: config.sourceConfirmations.toString() },
-    destination: { name: destinationChain.name, chainId: destinationChain.id, currency: 'ETH', rpcUrl: config.destinationRpcUrls[0], rpcUrls: config.destinationRpcUrls, explorerUrl: 'https://sepolia.basescan.org', mirror: config.mirror, confirmations: config.destinationConfirmations.toString() },
+    source: { name: sourceChain.name, chainId: sourceChain.id, currency: sourceChain.nativeCurrency.symbol, rpcUrl: config.publicSourceRpcUrl, explorerUrl: config.sourceChainId === 666666666 ? 'https://explorer.degen.tips' : 'https://sepolia.etherscan.io', vault: config.sourceVault, confirmations: config.sourceConfirmations.toString() },
+    destination: { name: destinationChain.name, chainId: destinationChain.id, currency: 'ETH', rpcUrl: config.publicDestinationRpcUrls[0], rpcUrls: config.publicDestinationRpcUrls, explorerUrl: config.destinationChainId === 8453 ? 'https://basescan.org' : 'https://sepolia.basescan.org', mirror: config.mirror, confirmations: config.destinationConfirmations.toString() },
     relayer: config.relayer, publicAppUrl: env('PUBLIC_APP_URL', 'https://degen-base-nft-bridge.vercel.app')
   };
 }
@@ -109,7 +121,7 @@ async function status() {
   const sourceBlock = value(3, null); const destinationBlock = value(4, null);
   const completed = transfers.filter(item => item.status === 'completed').length;
   const waiting = transfers.filter(item => item.status !== 'completed').length;
-  const errors = [transferResult, ...checks].flatMap((check, index) => check.status === 'rejected' ? [{ check: ['transfers', 'sourceBalance', 'destinationBalance', 'depositCount', 'sourceBlock', 'destinationBlock'][index], message: check.reason?.message || String(check.reason) }] : []);
+  const errors = [transferResult, ...checks].flatMap((check, index) => check.status === 'rejected' ? [{ check: ['transfers', 'sourceBalance', 'destinationBalance', 'depositCount', 'sourceBlock', 'destinationBlock'][index], message: 'Temporarily unavailable.' }] : []);
   return {
     ok: errors.length === 0, degraded: errors.length > 0, errors, relayEnabled, safetyReason: publicConfig().safetyReason,
     queue: { waiting, discovered: waiting, submitted: 0, completed, failed: 0, notIndexed: 0, totalDeposits: transfers.length.toString(), vaultTotalDeposits: vaultDepositCount.toString() },
@@ -127,12 +139,24 @@ async function relay(bridgeId) {
   const { logs } = await sourceLogs();
   const log = logs.find(item => item.args.id.toLowerCase() === bridgeId.toLowerCase());
   if (!log) throw new Error('finalized bridge event not found in the configured source vault');
+  if (Buffer.byteLength(log.args.tokenUri, 'utf8') > config.maxTokenUriBytes) throw new Error('metadata URI exceeds the configured safety limit');
+  if (Number(log.args.tokenStandard) === 1) {
+    const owner = await source.readContract({ address: log.args.collection, abi: erc721MetadataAbi, functionName: 'ownerOf', args: [log.args.tokenId], blockNumber: log.blockNumber });
+    if (owner.toLowerCase() !== config.sourceVault.toLowerCase()) throw new Error('source vault custody check failed');
+  } else if (Number(log.args.tokenStandard) === 2) {
+    const balance = await source.readContract({ address: log.args.collection, abi: erc1155MetadataAbi, functionName: 'balanceOf', args: [config.sourceVault, log.args.tokenId], blockNumber: log.blockNumber });
+    if (balance < log.args.amount) throw new Error('source vault custody check failed');
+  } else throw new Error('unsupported source token standard');
   const wallet = createWalletClient({ account, chain: destinationChain, transport: destinationTransport });
-  const hash = await wallet.writeContract({ address: config.mirror, abi: mirrorAbi, functionName: 'mintFromDegen', args: [log.args.id, log.args.holder, log.args.collection, log.args.tokenId, log.args.tokenUri] });
+  const mintArgs = [log.args.id, log.args.holder, log.args.collection, log.args.tokenId, log.args.tokenUri];
+  const gas = await destination.estimateContractGas({ account: account.address, address: config.mirror, abi: mirrorAbi, functionName: 'mintFromDegen', args: mintArgs });
+  if (gas > config.maxMintGas) throw new Error('destination mint exceeds the configured gas limit');
+  const hash = await wallet.writeContract({ address: config.mirror, abi: mirrorAbi, functionName: 'mintFromDegen', args: mintArgs, gas });
   return { status: 'submitted', bridgeId, destinationTxHash: hash };
 }
 
 function json(res, code, body) {
+  applySecurityHeaders((name, value) => res.setHeader(name, value));
   res.statusCode = code; res.setHeader('content-type', 'application/json; charset=utf-8'); res.setHeader('cache-control', 'no-store');
   res.setHeader('access-control-allow-origin', '*'); res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS'); res.setHeader('access-control-allow-headers', 'content-type'); res.end(JSON.stringify(body));
 }
@@ -142,12 +166,14 @@ export default async function handler(req, res) {
   const path = Array.isArray(req.query?.path) ? `/${req.query.path.join('/')}` : `/${String(req.query?.path || (req.url || '/').split('?')[0]).replace(/^\/?api\/?/, '').replace(/^\/+/, '')}`;
   try {
     if (req.method === 'POST' && path === '/relay') {
+      if (!relayRateLimit(requestClientKey(req))) return json(res, 429, { error: 'Too many relay requests. Please wait before retrying.' });
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
       return json(res, 202, await relay(body.bridgeId));
     }
     if (req.method !== 'GET') return json(res, 405, { error: 'method not allowed' });
     if (path === '/config') return json(res, 200, publicConfig());
     if (path === '/nfts') {
+      if (!nftRateLimit(requestClientKey(req))) return json(res, 429, { error: 'Too many NFT discovery requests. Please wait before retrying.' });
       const result = await discoverOwnedNfts({ owner: req.query?.owner, sourceChainId: config.sourceChainId, explorerUrl: config.sourceExplorerUrl, cursor: req.query?.cursor, limit: req.query?.limit });
       return json(res, 200, result);
     }
@@ -158,5 +184,9 @@ export default async function handler(req, res) {
       return json(res, transfer ? 200 : 404, transfer || { error: 'transfer not found' });
     }
     return json(res, 404, { error: 'not found' });
-  } catch (error) { return json(res, error instanceof NftDiscoveryError ? error.statusCode : 400, { error: error.message, ...(error instanceof NftDiscoveryError ? { code: error.code } : {}) }); }
+  } catch (error) {
+    if (error instanceof NftDiscoveryError) return json(res, error.statusCode, { error: error.message, code: error.code });
+    console.error(`[api] ${error.stack || error.message}`);
+    return json(res, 400, { error: 'Request could not be completed.' });
+  }
 }

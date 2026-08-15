@@ -1,4 +1,4 @@
-import { createPublicClient, createWalletClient, custom, decodeEventLog, formatEther, getAddress, http, isAddress, parseEther } from 'https://esm.sh/viem@2.50.4';
+import { createPublicClient, createWalletClient, custom, decodeEventLog, formatEther, getAddress, http, isAddress, parseEther } from './vendor/viem.js';
 
 const API_BASE = window.BRIDGE_API_URL || (location.hostname.endsWith('github.io') ? '' : location.origin);
 const proof = {
@@ -7,6 +7,10 @@ const proof = {
   bridgeId: null,
   collection: '0x22A3a63eB8276928Cb5D45f5e67533BCa7D859A6', recipient: '0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D', standard: 'Vault deployment', sourceTokenId: '—', mirrorTokenId: '—'
 };
+const ALLOWED_ROUTES = [
+  { sourceChainId: 666666666, sourceName: 'Degen Chain', sourceCurrency: 'DEGEN', sourceVault: '0x22A3a63eB8276928Cb5D45f5e67533BCa7D859A6', sourceRpcUrl: 'https://rpc.degen.tips', sourceExplorerUrl: 'https://explorer.degen.tips', destinationChainId: 8453, destinationName: 'Base', mirror: '0xE08e1ae0e27300882CfF35534cfd5804BFa87697', destinationRpcUrls: ['https://mainnet.base.org', 'https://base-rpc.publicnode.com', 'https://base.llamarpc.com'], destinationExplorerUrl: 'https://basescan.org', relayer: '0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D' },
+  { sourceChainId: 11155111, sourceName: 'Ethereum Sepolia', sourceCurrency: 'ETH', sourceVault: '0x61e9c5A6f1f656806e201857B6c08e7a3c14818a', sourceRpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com', sourceExplorerUrl: 'https://sepolia.etherscan.io', destinationChainId: 84532, destinationName: 'Base Sepolia', mirror: '0xa0A44dEAD4F124B425DeE4466d542DD612D10517', destinationRpcUrls: ['https://base-sepolia-rpc.publicnode.com', 'https://base-sepolia.drpc.org', 'https://sepolia.base.org'], destinationExplorerUrl: 'https://sepolia.basescan.org', relayer: '0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D' }
+];
 const sourceAbi = [
   { type: 'function', name: 'bridge', stateMutability: 'nonpayable', inputs: [{ name: 'collection', type: 'address' }, { name: 'tokenId', type: 'uint256' }], outputs: [{ name: 'id', type: 'bytes32' }] },
   { type: 'event', name: 'NFTBridged', inputs: [{ indexed: true, name: 'id', type: 'bytes32' }, { indexed: true, name: 'collection', type: 'address' }, { indexed: true, name: 'tokenId', type: 'uint256' }, { indexed: false, name: 'holder', type: 'address' }, { indexed: false, name: 'tokenStandard', type: 'uint8' }, { indexed: false, name: 'amount', type: 'uint256' }, { indexed: false, name: 'tokenUri', type: 'string' }, { indexed: false, name: 'timestamp', type: 'uint256' }] }
@@ -23,11 +27,16 @@ const nftAbi = [
   { type: 'function', name: 'setApprovalForAll', stateMutability: 'nonpayable', inputs: [{ type: 'address' }, { type: 'bool' }], outputs: [] }
 ];
 
-const state = { config: null, status: null, transfers: [], account: null, wallet: null, provider: null, providerListener: null, providers: [], nft: null, nftPicker: { items: [], nextCursor: null, loading: false, loadedFor: null }, filter: 'all', apiOnline: false };
+const state = { config: null, status: null, transfers: [], account: null, wallet: null, provider: null, providerListener: null, providers: [], nft: null, nftPicker: { items: [], nextCursor: null, loading: false, loadedFor: null }, filter: 'all', apiOnline: false, routeTrusted: false };
 const $ = id => document.getElementById(id);
 const short = (value, head = 6, tail = 4) => value ? `${value.slice(0, head)}…${value.slice(-tail)}` : '—';
 const formatBalance = value => { const number = Number(value || 0); return number >= 1000 ? number.toLocaleString(undefined, { maximumFractionDigits: 1 }) : number.toLocaleString(undefined, { maximumFractionDigits: number < .01 ? 5 : 3 }); };
-const explorer = (base, kind, value) => `${base}/${kind}/${value}`;
+const explorer = (base, kind, value) => {
+  try {
+    const url = new URL(`${String(base || '').replace(/\/$/, '')}/${kind}/${encodeURIComponent(value)}`, location.origin);
+    return url.protocol === 'https:' || url.origin === location.origin ? url.href : '#';
+  } catch { return '#'; }
+};
 
 function providerLabel(provider, info = {}) {
   if (info.name) return info.name;
@@ -81,9 +90,29 @@ async function api(path) {
 function fallbackConfig() {
   return { bridgeEnabled: false, safetyReason: 'The production relayer API is not connected. Bridge transactions remain disabled until the operator verifies the service.', routeMode: 'production', source: { name: 'Degen Chain', chainId: 666666666, currency: 'DEGEN', rpcUrl: proof.source.rpc, explorerUrl: 'https://degen.tips', vault: proof.source.address, confirmations: '5' }, destination: { name: 'Base', chainId: 8453, currency: 'ETH', rpcUrl: proof.destination.rpc, rpcUrls: [proof.destination.rpc, 'https://base-rpc.publicnode.com', 'https://base.llamarpc.com'], explorerUrl: 'https://basescan.org', mirror: proof.destination.address, confirmations: '5' }, relayer: proof.recipient };
 }
+const sameAddress = (left, right) => typeof left === 'string' && typeof right === 'string' && left.toLowerCase() === right.toLowerCase();
+function allowedRoute(config) {
+  return ALLOWED_ROUTES.find(route => Number(config?.source?.chainId) === route.sourceChainId
+    && sameAddress(config?.source?.vault, route.sourceVault)
+    && Number(config?.destination?.chainId) === route.destinationChainId
+    && sameAddress(config?.destination?.mirror, route.mirror)
+    && sameAddress(config?.relayer, route.relayer));
+}
+const isAllowedRoute = config => !!allowedRoute(config);
+function pinRoute(config) {
+  const route = allowedRoute(config);
+  state.routeTrusted = !!route;
+  if (route) return {
+    ...config,
+    source: { ...config.source, name: route.sourceName, currency: route.sourceCurrency, chainId: route.sourceChainId, vault: route.sourceVault, rpcUrl: route.sourceRpcUrl, rpcUrls: [route.sourceRpcUrl], explorerUrl: route.sourceExplorerUrl },
+    destination: { ...config.destination, name: route.destinationName, currency: 'ETH', chainId: route.destinationChainId, mirror: route.mirror, rpcUrl: route.destinationRpcUrls[0], rpcUrls: route.destinationRpcUrls, explorerUrl: route.destinationExplorerUrl },
+    relayer: route.relayer
+  };
+  return { ...config, bridgeEnabled: false, safetyReason: 'The API returned an unrecognized bridge route. All wallet transactions are disabled.' };
+}
 async function loadConfig() {
-  try { state.config = await api('/api/config'); state.apiOnline = true; setApiIndicator('online', 'API online'); }
-  catch { state.config = fallbackConfig(); state.apiOnline = false; setApiIndicator('offline', 'Static demo'); }
+  try { state.config = pinRoute(await api('/api/config')); state.apiOnline = true; setApiIndicator('online', 'API online'); }
+  catch { state.config = pinRoute(fallbackConfig()); state.apiOnline = false; setApiIndicator('offline', 'Static demo'); }
   renderConfig();
 }
 function renderConfig() {
@@ -124,14 +153,19 @@ function renderStatus() {
   $('last-poll').textContent = status.runtime?.lastSuccessfulPollAt ? new Date(status.runtime.lastSuccessfulPollAt).toLocaleString() : '—'; $('source-checkpoint').textContent = status.blocks?.nextSourceBlock || '—'; $('source-block').textContent = status.blocks?.source || '—'; $('destination-block').textContent = status.blocks?.destination || '—';
   $('transfer-updated').textContent = status.updatedAt ? `Updated ${new Date(status.updatedAt).toLocaleTimeString()}` : 'Static proof data';
 }
-function transferStatus(transfer) { return transfer.status === 'discovered' ? 'waiting' : transfer.status; }
+function transferStatus(transfer) { return transfer.status === 'discovered' ? 'waiting' : ['waiting', 'submitted', 'completed', 'error'].includes(transfer.status) ? transfer.status : 'error'; }
 function renderTransfers() {
   const tbody = $('transfer-table-body'); tbody.innerHTML = '';
   const transfers = state.transfers.filter(item => state.filter === 'all' || transferStatus(item) === state.filter);
   $('transfer-empty').hidden = transfers.length > 0;
   for (const transfer of transfers) {
-    const row = document.createElement('tr'); const sourceUrl = explorer(state.config.source.explorerUrl, 'tx', transfer.sourceTxHash); const destinationUrl = transfer.destinationTxHash ? explorer(state.config.destination.explorerUrl, 'tx', transfer.destinationTxHash) : null;
-    row.innerHTML = `<td><strong>${short(transfer.sourceCollection)}</strong><br><code>#${transfer.sourceTokenId}</code></td><td><code>${short(transfer.holder)}</code></td><td><a href="${sourceUrl}" target="_blank" rel="noreferrer">${short(transfer.sourceTxHash)}</a></td><td><span class="status-pill ${transferStatus(transfer)}">${transferStatus(transfer)}</span></td><td>${destinationUrl ? `<a href="${destinationUrl}" target="_blank" rel="noreferrer">Token #${transfer.mirrorTokenId || 'pending'}</a>` : '<span>Waiting</span>'}</td>`;
+    const row = document.createElement('tr'); const sourceUrl = explorer(state.config.source.explorerUrl, 'tx', transfer.sourceTxHash); const destinationUrl = transfer.destinationTxHash ? explorer(state.config.destination.explorerUrl, 'tx', transfer.destinationTxHash) : null; const status = transferStatus(transfer);
+    const nftCell = document.createElement('td'); const collection = document.createElement('strong'); collection.textContent = short(transfer.sourceCollection); const token = document.createElement('code'); token.textContent = `#${transfer.sourceTokenId}`; nftCell.append(collection, document.createElement('br'), token);
+    const holderCell = document.createElement('td'); const holder = document.createElement('code'); holder.textContent = short(transfer.holder); holderCell.append(holder);
+    const sourceCell = document.createElement('td'); const sourceLink = document.createElement('a'); sourceLink.href = sourceUrl; sourceLink.target = '_blank'; sourceLink.rel = 'noreferrer'; sourceLink.textContent = short(transfer.sourceTxHash); sourceCell.append(sourceLink);
+    const statusCell = document.createElement('td'); const statusPill = document.createElement('span'); statusPill.className = `status-pill ${status}`; statusPill.textContent = status; statusCell.append(statusPill);
+    const destinationCell = document.createElement('td'); if (destinationUrl) { const destinationLink = document.createElement('a'); destinationLink.href = destinationUrl; destinationLink.target = '_blank'; destinationLink.rel = 'noreferrer'; destinationLink.textContent = `Token #${transfer.mirrorTokenId || 'pending'}`; destinationCell.append(destinationLink); } else { const waiting = document.createElement('span'); waiting.textContent = 'Waiting'; destinationCell.append(waiting); }
+    row.append(nftCell, holderCell, sourceCell, statusCell, destinationCell);
     tbody.append(row);
   }
 }
@@ -214,7 +248,7 @@ function renderProviderList() {
   for (const entry of providers) {
     const button = document.createElement('button');
     button.type = 'button'; button.className = 'wallet-provider'; button.setAttribute('role', 'menuitem');
-    if (entry.info.icon) { const image = document.createElement('img'); image.src = entry.info.icon; image.alt = ''; button.append(image); }
+    if (entry.info.icon) { const image = document.createElement('img'); image.src = entry.info.icon; image.alt = ''; image.referrerPolicy = 'no-referrer'; button.append(image); }
     const label = document.createElement('span'); label.textContent = entry.info.name || providerLabel(entry.provider); button.append(label);
     button.addEventListener('click', () => connectWallet(entry.provider).then(() => { list.hidden = true; $('wallet-menu').hidden = true; updateWalletUi(); }).catch(error => toast(error.shortMessage || error.message, 'error')));
     list.append(button);
@@ -297,7 +331,7 @@ function renderNftPicker() {
     button.type = 'button'; button.className = 'nft-picker-card';
     const imageUrl = mediaUrl(item.image);
     if (imageUrl) {
-      const image = document.createElement('img'); image.src = imageUrl; image.alt = '';
+      const image = document.createElement('img'); image.src = imageUrl; image.alt = ''; image.loading = 'lazy'; image.decoding = 'async'; image.referrerPolicy = 'no-referrer';
       image.onerror = () => { const placeholder = document.createElement('span'); placeholder.className = 'nft-picker-placeholder'; placeholder.textContent = 'NFT'; image.replaceWith(placeholder); };
       button.append(image);
     } else {
@@ -333,7 +367,7 @@ async function loadOwnedNfts(append = false) {
   const owner = state.account;
   state.nftPicker.loading = true;
   $('nft-picker-status').className = 'picker-status';
-  $('nft-picker-status').textContent = append ? 'Loading more NFTs…' : 'Loading NFTs from Degen Explorer…';
+  $('nft-picker-status').textContent = append ? 'Loading more NFTs…' : 'Sending this public wallet address to Degen Explorer to find NFTs…';
   $('refresh-nft-picker').disabled = true; $('load-more-nfts').disabled = true;
   try {
     const cursor = append && state.nftPicker.nextCursor ? `&cursor=${encodeURIComponent(state.nftPicker.nextCursor)}` : '';
@@ -403,7 +437,7 @@ async function inspectNft(event) {
     }
     const metadata = parseMetadata(tokenUri); state.nft = { collection, tokenId, owner: getAddress(owner), tokenUri, metadata, approved, standard, amount };
     $('nft-name').textContent = metadata.name || `Token #${tokenId}`; $('nft-description').textContent = metadata.description || 'No description supplied.'; $('nft-owner').textContent = short(owner); $('nft-owner').title = owner; $('nft-uri-type').textContent = `${standard} · ${metadata.type}`;
-    const media = $('nft-media'); media.innerHTML = '<span>NFT</span>'; if (metadata.image) { const image = document.createElement('img'); image.src = mediaUrl(metadata.image); image.alt = metadata.name || 'NFT preview'; image.onerror = () => image.remove(); media.append(image); }
+    const media = $('nft-media'); media.innerHTML = '<span>NFT</span>'; if (metadata.image) { const image = document.createElement('img'); image.src = mediaUrl(metadata.image); image.alt = metadata.name || 'NFT preview'; image.loading = 'lazy'; image.decoding = 'async'; image.referrerPolicy = 'no-referrer'; image.onerror = () => image.remove(); media.append(image); }
     $('nft-preview').hidden = false; $('step-inspect').classList.add('complete'); $('step-inspect').classList.remove('current'); $('step-approve').classList.toggle('complete', approved); $('step-approve').classList.toggle('current', !approved); $('step-bridge').classList.toggle('current', approved); updateTransactionAction();
   } catch (error) { state.nft = null; toast(error.shortMessage || error.message || `Unable to read this NFT on ${state.config?.source?.name || 'Degen Chain'}.`, 'error'); }
   finally { button.disabled = false; button.textContent = 'Inspect NFT'; }
@@ -416,9 +450,14 @@ function updateTransactionAction() {
   if (!state.config?.bridgeEnabled) { button.disabled = true; button.textContent = 'Bridge disabled on this route'; $('transaction-note').textContent = state.config?.safetyReason || ''; return; }
   if (!state.account) { button.disabled = false; button.textContent = 'Connect wallet to continue'; button.dataset.action = 'connect'; $('transaction-note').textContent = ''; return; }
   if (state.account.toLowerCase() !== state.nft.owner.toLowerCase()) { button.disabled = true; button.textContent = 'Connected wallet does not own this NFT'; $('transaction-note').textContent = `Owner: ${state.nft.owner}`; return; }
-  button.disabled = false; button.dataset.action = state.nft.approved ? 'bridge' : 'approve'; button.textContent = state.nft.approved ? 'Bridge NFT to Base' : 'Approve vault'; $('transaction-note').textContent = state.nft.approved ? 'This action permanently locks the original NFT.' : 'Approval does not move the NFT.';
+  button.disabled = false; button.dataset.action = state.nft.approved ? 'bridge' : 'approve'; button.textContent = state.nft.approved ? 'Bridge NFT to Base' : 'Approve vault'; $('transaction-note').textContent = state.nft.approved ? 'This action permanently locks the original NFT.' : state.nft.standard === 'ERC-1155' ? 'ERC-1155 approval grants this vault access to every NFT in this collection. The bridge will lock one unit of the selected token ID.' : 'ERC-721 approval applies only to this token and does not move it.';
 }
-async function requireSafeRoute() { const latest = await api('/api/config'); if (!latest.bridgeEnabled) throw new Error(latest.safetyReason || 'Bridge is disabled'); state.config = latest; }
+async function requireSafeRoute(requireBridgeEnabled = true) {
+  const latest = await api('/api/config');
+  if (!isAllowedRoute(latest)) throw new Error('The API returned an unrecognized transaction route. No wallet request was sent.');
+  state.config = pinRoute(latest);
+  if (requireBridgeEnabled && !latest.bridgeEnabled) throw new Error(latest.safetyReason || 'Bridge is disabled');
+}
 async function transactionAction() {
   const action = $('transaction-action').dataset.action; if (action === 'connect') return openWalletPicker(); if (!state.nft || !state.account) return;
   await requireSafeRoute(); await switchChain(state.config.source); const button = $('transaction-action'); button.disabled = true;
@@ -439,9 +478,10 @@ async function transactionAction() {
 $('transaction-action').addEventListener('click', transactionAction);
 
 async function fundRelayer(event) {
-  event.preventDefault(); if (!state.account) await connectWallet(); if (!state.account) return; const chainKey = event.currentTarget.dataset.chain; const chain = chainKey === 'base' ? state.config.destination : state.config.source; const input = event.currentTarget.querySelector('input');
+  event.preventDefault(); if (!state.account) await connectWallet(); if (!state.account) return; const input = event.currentTarget.querySelector('input');
   if (!input.value || Number(input.value) <= 0) return toast('Enter an amount greater than zero.', 'error');
-  try { await switchChain(chain); const wallet = createWalletClient({ account: state.account, chain: { id: chain.chainId, name: chain.name, nativeCurrency: { name: chain.currency === 'ETH' ? 'Ether' : chain.currency, symbol: chain.currency, decimals: 18 }, rpcUrls: { default: { http: chain.rpcUrls?.length ? chain.rpcUrls : [chain.rpcUrl] } } }, transport: custom(activeProvider()) }); const hash = await wallet.sendTransaction({ account: state.account, chain: wallet.chain, to: state.config.relayer, value: parseEther(input.value) }); toast(`${chain.currency} top-up submitted: ${short(hash)}`, 'success'); input.value = ''; setTimeout(() => loadStatus(true), 5000); }
+  let chain;
+  try { await requireSafeRoute(false); const chainKey = event.currentTarget.dataset.chain; chain = chainKey === 'base' ? state.config.destination : state.config.source; await switchChain(chain); const wallet = createWalletClient({ account: state.account, chain: { id: chain.chainId, name: chain.name, nativeCurrency: { name: chain.currency === 'ETH' ? 'Ether' : chain.currency, symbol: chain.currency, decimals: 18 }, rpcUrls: { default: { http: chain.rpcUrls?.length ? chain.rpcUrls : [chain.rpcUrl] } } }, transport: custom(activeProvider()) }); const hash = await wallet.sendTransaction({ account: state.account, chain: wallet.chain, to: state.config.relayer, value: parseEther(input.value) }); toast(`${chain.currency} top-up submitted: ${short(hash)}`, 'success'); input.value = ''; setTimeout(() => loadStatus(true), 5000); }
   catch (error) { if (/\b429\b|rate.?limit|too many requests|routeme/i.test(error?.shortMessage || error?.message || String(error))) $('wallet-rpc-help').hidden = false; toast(errorMessage(error, chain), 'error'); }
 }
 document.querySelectorAll('.fund-form').forEach(form => form.addEventListener('submit', fundRelayer));
