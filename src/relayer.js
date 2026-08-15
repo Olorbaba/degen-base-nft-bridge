@@ -433,14 +433,17 @@ export function createHttpServer(relayer, config, statusService = createStatusSe
         const transfer = statusService.transfers().find(item => item.id.toLowerCase() === id.toLowerCase());
         return sendJson(response, transfer ? 200 : 404, transfer || { error: 'transfer not found' }, config.corsOrigin);
       }
-      if (request.method !== 'GET') return sendJson(response, 405, { error: 'method not allowed' }, config.corsOrigin);
+      if (request.method !== 'GET' && request.method !== 'HEAD') return sendJson(response, 405, { error: 'method not allowed' }, config.corsOrigin);
 
       const requested = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '');
       const file = path.resolve(docsRoot, requested);
       if (!file.startsWith(`${docsRoot}${path.sep}`) && file !== path.join(docsRoot, 'index.html')) return sendJson(response, 403, { error: 'forbidden' }, config.corsOrigin);
-      if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return sendJson(response, 404, { error: 'not found' }, config.corsOrigin);
+      if (!fs.existsSync(file)) return sendJson(response, 404, { error: 'not found' }, config.corsOrigin);
+      const fileStat = fs.statSync(file);
+      if (!fileStat.isFile()) return sendJson(response, 404, { error: 'not found' }, config.corsOrigin);
       applySecurityHeaders((name, value) => response.setHeader(name, value));
-      response.writeHead(200, { 'content-type': contentTypes[path.extname(file)] || 'application/octet-stream', 'cache-control': path.extname(file) === '.html' ? 'no-cache' : 'public, max-age=300' });
+      response.writeHead(200, { 'content-type': contentTypes[path.extname(file)] || 'application/octet-stream', 'content-length': fileStat.size, 'cache-control': path.extname(file) === '.html' ? 'no-cache' : 'public, max-age=300' });
+      if (request.method === 'HEAD') return response.end();
       fs.createReadStream(file).pipe(response);
     } catch (error) {
       if (error instanceof NftDiscoveryError) return sendJson(response, error.statusCode, { error: error.message, code: error.code }, config.corsOrigin);
