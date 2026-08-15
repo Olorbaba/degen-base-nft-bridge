@@ -30,7 +30,12 @@ const nftAbi = [
 const state = { config: null, status: null, transfers: [], account: null, wallet: null, provider: null, providerListener: null, providers: [], nft: null, nftPicker: { items: [], nextCursor: null, loading: false, loadedFor: null }, filter: 'all', apiOnline: false, routeTrusted: false };
 const $ = id => document.getElementById(id);
 const short = (value, head = 6, tail = 4) => value ? `${value.slice(0, head)}…${value.slice(-tail)}` : '—';
-const formatBalance = value => { const number = Number(value || 0); return number >= 1000 ? number.toLocaleString(undefined, { maximumFractionDigits: 1 }) : number.toLocaleString(undefined, { maximumFractionDigits: number < .01 ? 5 : 3 }); };
+const formatBalance = value => {
+  if (value === null || value === undefined || value === '' || value === '—') return '—';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return number >= 1000 ? number.toLocaleString(undefined, { maximumFractionDigits: 1 }) : number.toLocaleString(undefined, { maximumFractionDigits: number < .01 ? 5 : 3 });
+};
 const explorer = (base, kind, value) => {
   try {
     const url = new URL(`${String(base || '').replace(/\/$/, '')}/${kind}/${encodeURIComponent(value)}`, location.origin);
@@ -133,22 +138,41 @@ function renderConfig() {
 }
 
 async function loadStatus(silent = false) {
-  try {
-    const [status, transferPayload] = await Promise.all([api('/api/status'), api('/api/transfers')]);
-    state.status = status; state.transfers = transferPayload.transfers || []; state.apiOnline = true; setApiIndicator('online', status.relayEnabled ? 'Relayer online' : 'API online');
-  } catch (error) {
+  const [statusResult, transferResult] = await Promise.allSettled([api('/api/status'), api('/api/transfers')]);
+  if (statusResult.status === 'fulfilled') {
+    state.status = statusResult.value;
+    state.apiOnline = true;
+    setApiIndicator('online', state.status.relayEnabled ? 'Relayer online' : 'API online');
+    const hasBalance = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+    if (!hasBalance(state.status.balances?.degen) || !hasBalance(state.status.balances?.eth)) await loadPublicBalances();
+  } else {
+    state.status = state.status || { queue: { waiting: 0, submitted: 0, completed: 0, failed: 0 }, balances: { degen: null, eth: null }, blocks: {}, runtime: {} };
+    await loadPublicBalances();
+  }
+  if (transferResult.status === 'fulfilled') state.transfers = transferResult.value.transfers || [];
+  if (statusResult.status === 'rejected' && transferResult.status === 'rejected') {
+    state.apiOnline = false;
     if (!silent) toast('The production relayer API is temporarily unavailable.', 'error');
-    state.status = state.status || { queue: { waiting: 0, submitted: 0, completed: 0, failed: 0 }, balances: { degen: '—', eth: '—' }, blocks: {}, runtime: {} };
-    state.transfers = state.transfers.length ? state.transfers : [];
   }
   renderStatus(); renderTransfers();
+}
+async function loadPublicBalances() {
+  if (!state.config?.relayer) return;
+  const [sourceResult, destinationResult] = await Promise.allSettled([
+    createPublicClient({ transport: http(state.config.source.rpcUrl, { retryCount: 2, timeout: 10_000 }) }).getBalance({ address: state.config.relayer }),
+    createPublicClient({ transport: http(state.config.destination.rpcUrl, { retryCount: 2, timeout: 10_000 }) }).getBalance({ address: state.config.relayer })
+  ]);
+  state.status.balances ||= {};
+  if (sourceResult.status === 'fulfilled') state.status.balances.degen = formatEther(sourceResult.value);
+  if (destinationResult.status === 'fulfilled') state.status.balances.eth = formatEther(destinationResult.value);
 }
 function renderStatus() {
   const status = state.status; if (!status) return; const queue = status.queue || {};
   $('nav-queue-count').textContent = queue.waiting || 0; $('sidebar-queue').textContent = queue.waiting ?? '—'; $('relayer-waiting').textContent = queue.waiting || 0;
   $('metric-waiting').textContent = queue.waiting || 0; $('metric-submitted').textContent = queue.submitted || 0; $('metric-completed').textContent = queue.completed || 0; $('metric-failed').textContent = queue.failed || 0;
-  $('base-balance').textContent = formatBalance(status.balances?.eth); $('degen-balance').textContent = formatBalance(status.balances?.degen); $('sidebar-base-balance').textContent = status.balances?.eth === '—' ? '—' : `${formatBalance(status.balances?.eth)} ETH`;
-  $('base-balance-bar').style.width = `${Math.min(100, Number(status.balances?.eth || 0) * 100)}%`; $('degen-balance-bar').style.width = `${Math.min(100, Number(status.balances?.degen || 0) / 50)}%`;
+  const ethDisplay = formatBalance(status.balances?.eth); const degenDisplay = formatBalance(status.balances?.degen); const ethNumber = Number(status.balances?.eth); const degenNumber = Number(status.balances?.degen);
+  $('base-balance').textContent = ethDisplay; $('degen-balance').textContent = degenDisplay; $('sidebar-base-balance').textContent = ethDisplay === '—' ? '—' : `${ethDisplay} ETH`;
+  $('base-balance-bar').style.width = `${Number.isFinite(ethNumber) ? Math.min(100, ethNumber * 100) : 0}%`; $('degen-balance-bar').style.width = `${Number.isFinite(degenNumber) ? Math.min(100, degenNumber / 50) : 0}%`;
   $('relayer-runtime').textContent = status.relayEnabled ? 'Minting enabled' : 'Minting safety locked';
   $('last-poll').textContent = status.runtime?.lastSuccessfulPollAt ? new Date(status.runtime.lastSuccessfulPollAt).toLocaleString() : '—'; $('source-checkpoint').textContent = status.blocks?.nextSourceBlock || '—'; $('source-block').textContent = status.blocks?.source || '—'; $('destination-block').textContent = status.blocks?.destination || '—';
   $('transfer-updated').textContent = status.updatedAt ? `Updated ${new Date(status.updatedAt).toLocaleTimeString()}` : 'Static proof data';
