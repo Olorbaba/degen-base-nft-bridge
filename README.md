@@ -4,7 +4,9 @@ A centralized, one-way ERC-721/ERC-1155 bridge for Degen Chain → Base. The pro
 
 > Current release: production bridge live; controlled smoke test completed. Source custody is permanent by design.
 
-Live application and read-only status API: **https://degen-base-nft-bridge.vercel.app**
+Production application and status API: **https://degen-base-nft-bridge-production.up.railway.app**
+
+Retained Ethereum Sepolia → Base Sepolia demo: **https://degen-base-nft-bridge.vercel.app**
 
 ## Architecture
 
