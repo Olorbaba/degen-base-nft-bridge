@@ -1,6 +1,7 @@
 import { createPublicClient, createWalletClient, custom, decodeEventLog, formatEther, getAddress, http, isAddress, parseEther } from './vendor/viem.js';
 
-const API_BASE = window.BRIDGE_API_URL || (location.hostname.endsWith('github.io') ? '' : location.origin);
+const PUBLIC_PRODUCTION_API = 'https://degen-base-nft-bridge-production.up.railway.app';
+const API_BASE = window.BRIDGE_API_URL || (location.hostname.endsWith('github.io') ? PUBLIC_PRODUCTION_API : location.origin);
 const proof = {
   source: { address: '0x22A3a63eB8276928Cb5D45f5e67533BCa7D859A6', tx: '0x860660d4bdd7681fcee1f1c931df861629c5f461133961d1fd4c73a6044e10c8', rpc: 'https://rpc.degen.tips' },
   destination: { address: '0xE08e1ae0e27300882CfF35534cfd5804BFa87697', tx: '0xd635263495bb1adb85ff4f9c59e2362e5b673c0391972c8376cedf604a047898', rpc: 'https://mainnet.base.org' },
