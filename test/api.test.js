@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPublicClient, custom } from 'viem';
 import { createRpcTransport, createStatusService, readConfig, relayById } from '../src/relayer.js';
+import { discoverOwnedNfts, NftDiscoveryError } from '../src/nftDiscovery.js';
 
 const address = `0x${'11'.repeat(20)}`;
 const config = {
@@ -111,4 +112,50 @@ test('destination transport fails over after an HTTP 429', async () => {
   const client = createPublicClient({ transport: createRpcTransport(['primary', 'backup'], transportFactory) });
   assert.equal(await client.getChainId(), 84532);
   assert.deepEqual(calls.map(call => call.url), ['primary', 'backup']);
+});
+
+test('NFT discovery normalizes Degen Explorer assets without authorizing a bridge', async () => {
+  const originalFetch = globalThis.fetch;
+  const owner = `0x${'44'.repeat(20)}`;
+  globalThis.fetch = async url => {
+    assert.match(String(url), new RegExp(`/addresses/${owner}/nft`));
+    return {
+      ok: true,
+      json: async () => ({
+        items: [{
+          id: '42', image_url: 'ipfs://image', value: '3', token_type: 'ERC-1155',
+          metadata: { name: 'Example NFT', description: 'Read-only discovery result' },
+          token: { address_hash: `0x${'55'.repeat(20)}`, name: 'Example Collection', symbol: 'EX' }
+        }],
+        next_page_params: { block_number: 10, index: 1, items_count: 24 }
+      })
+    };
+  };
+  try {
+    const result = await discoverOwnedNfts({ owner, sourceChainId: 666666666, explorerUrl: 'https://explorer.example' });
+    assert.equal(result.items[0].collection, `0x${'55'.repeat(20)}`);
+    assert.equal(result.items[0].tokenId, '42');
+    assert.equal(result.items[0].standard, 'ERC-1155');
+    assert.equal(result.items[0].amount, '3');
+    assert.equal(result.items[0].name, 'Example NFT');
+    assert.ok(result.nextCursor);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('NFT discovery rejects unsupported chains and malformed owners', async () => {
+  await assert.rejects(() => discoverOwnedNfts({ owner: `0x${'66'.repeat(20)}`, sourceChainId: 11155111 }), error => error instanceof NftDiscoveryError && error.code === 'unsupported_chain');
+  await assert.rejects(() => discoverOwnedNfts({ owner: 'not-an-address', sourceChainId: 666666666 }), error => error instanceof NftDiscoveryError && error.code === 'invalid_owner');
+});
+
+test('NFT discovery ignores unsupported token standards', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ items: [{ id: '1', token_type: 'ERC-20', token: { address_hash: `0x${'77'.repeat(20)}` } }] }) });
+  try {
+    const result = await discoverOwnedNfts({ owner: `0x${'88'.repeat(20)}`, sourceChainId: 666666666, explorerUrl: 'https://explorer.example' });
+    assert.deepEqual(result.items, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

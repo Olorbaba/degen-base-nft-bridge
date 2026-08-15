@@ -26,7 +26,15 @@
     </nav>
     <div class="header-actions">
       <span id="api-indicator" class="api-indicator"><i></i><span>Connecting</span></span>
-      <button id="connect-wallet" class="wallet-button"><span class="wallet-dot"></span><span>Connect wallet</span></button>
+      <div class="wallet-control">
+        <button id="connect-wallet" class="wallet-button" aria-haspopup="menu" aria-expanded="false"><span class="wallet-dot"></span><span>Connect wallet</span></button>
+        <div id="wallet-menu" class="wallet-menu" role="menu" hidden>
+          <div id="wallet-menu-account" class="wallet-menu-account"></div>
+          <button id="switch-wallet" type="button" role="menuitem">Switch wallet</button>
+          <button id="disconnect-wallet" type="button" role="menuitem">Disconnect</button>
+          <div id="wallet-provider-list" class="wallet-provider-list" hidden></div>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -63,6 +71,18 @@
             </div>
             <button id="inspect-nft" class="primary-action" type="submit">Inspect NFT</button>
           </form>
+
+          <section class="nft-picker" aria-label="Wallet NFT picker">
+            <button id="toggle-nft-picker" class="picker-toggle" type="button" aria-expanded="false" aria-controls="nft-picker-panel"><span aria-hidden="true">+</span><span>Choose an NFT from this wallet</span></button>
+            <div id="nft-picker-panel" class="nft-picker-panel" hidden>
+              <div class="picker-toolbar"><div><strong>Wallet NFTs</strong><small>Discovery is read-only. The bridge still verifies the asset directly on Degen Chain.</small></div><button id="refresh-nft-picker" class="picker-refresh" type="button">Refresh</button></div>
+              <label class="picker-search" for="nft-picker-search"><span>Search collection or NFT</span><input id="nft-picker-search" type="search" placeholder="Search by name" autocomplete="off"></label>
+              <div id="nft-picker-status" class="picker-status" role="status">Connect a wallet to load NFTs.</div>
+              <div id="nft-picker-list" class="nft-picker-list"></div>
+              <button id="load-more-nfts" class="secondary-action picker-more" type="button" hidden>Load more</button>
+              <p class="picker-fallback">Can’t find it? Enter the contract address and token ID above.</p>
+            </div>
+          </section>
 
           <div id="nft-preview" class="nft-preview" hidden>
             <div id="nft-media" class="nft-media"><span>NFT</span></div>

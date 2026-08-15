@@ -1,6 +1,7 @@
 import { createPublicClient, createWalletClient, defineChain, fallback, formatEther, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sourceAbi, mirrorAbi } from '../src/abis.js';
+import { discoverOwnedNfts, NftDiscoveryError } from '../src/nftDiscovery.js';
 
 const DEFAULTS = {
   sourceRpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
@@ -31,6 +32,7 @@ const config = {
   sourceConfirmations: BigInt(env('SOURCE_CONFIRMATIONS', DEFAULTS.sourceConfirmations)),
   destinationConfirmations: BigInt(env('DESTINATION_CONFIRMATIONS', DEFAULTS.destinationConfirmations))
 };
+config.sourceExplorerUrl = env('SOURCE_EXPLORER_URL', config.sourceChainId === 666666666 ? 'https://explorer.degen.tips' : '');
 config.destinationRpcUrls = uniqueUrls([
   env('BASE_RPC_URLS', ''),
   config.destinationRpcUrl,
@@ -145,6 +147,10 @@ export default async function handler(req, res) {
     }
     if (req.method !== 'GET') return json(res, 405, { error: 'method not allowed' });
     if (path === '/config') return json(res, 200, publicConfig());
+    if (path === '/nfts') {
+      const result = await discoverOwnedNfts({ owner: req.query?.owner, sourceChainId: config.sourceChainId, explorerUrl: config.sourceExplorerUrl, cursor: req.query?.cursor, limit: req.query?.limit });
+      return json(res, 200, result);
+    }
     if (path === '/status' || path === '/health' || path === '/healthz') return json(res, 200, await status());
     if (path === '/transfers') return json(res, 200, { transfers: await indexedTransfers() });
     if (path.startsWith('/transfers/')) {
@@ -152,5 +158,5 @@ export default async function handler(req, res) {
       return json(res, transfer ? 200 : 404, transfer || { error: 'transfer not found' });
     }
     return json(res, 404, { error: 'not found' });
-  } catch (error) { return json(res, 400, { error: error.message }); }
+  } catch (error) { return json(res, error instanceof NftDiscoveryError ? error.statusCode : 400, { error: error.message, ...(error instanceof NftDiscoveryError ? { code: error.code } : {}) }); }
 }

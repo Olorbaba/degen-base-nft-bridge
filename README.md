@@ -1,8 +1,8 @@
 # Degen → Base one-way NFT bridge
 
-A centralized, one-way ERC-721/ERC-1155 bridge for Degen Chain → Base. The production contracts are deployed on Degen mainnet and Base mainnet; the relayer remains explicitly safety-locked until its hosted infrastructure and controlled pilot are complete.
+A centralized, one-way ERC-721/ERC-1155 bridge for Degen Chain → Base. The production contracts are deployed on Degen mainnet and Base mainnet, and the Railway relayer has passed a controlled end-to-end production smoke test.
 
-> Current release: production contracts deployed, relayer locked. Source custody is permanent by design.
+> Current release: production bridge live; controlled smoke test completed. Source custody is permanent by design.
 
 Live application and read-only status API: **https://degen-base-nft-bridge.vercel.app**
 
@@ -39,11 +39,12 @@ forge test
 The application includes four operational views:
 
 - **Bridge**: wallet connection, network switching, ERC-721/ERC-1155 inspection, metadata preview, approval, and source deposit.
+- **Wallet picker**: optional read-only discovery of the connected wallet's Degen NFTs through the public Degen Explorer index. Selecting an item only fills the existing form; direct RPC inspection remains authoritative before any approval or permanent lock.
 - **Transfers**: waiting, submitted, completed, and failed bridge records.
 - **Relayer**: live Degen and Base balances, queue depth, checkpoints, and native-token top-up forms.
 - **Proof**: independently verifiable controlled deployment evidence.
 
-The server-provided production configuration exposes Degen → Base, but bridge minting is disabled until the Railway service is verified and the operator enables both production safety flags.
+The server-provided production configuration exposes the live Degen → Base route. The relayer is protected by explicit production flags and a dedicated low-balance key stored only in Railway encrypted variables.
 
 If an injected wallet has a rate-limited Base RPC saved, use **Relayer → Repair wallet RPC** and replace it with a stable Base mainnet endpoint such as `https://mainnet.base.org`.
 
@@ -80,6 +81,7 @@ The service exposes:
 - `GET /healthz`: process health independent of RPC availability.
 - `GET /api/config`: public chain, contract, relayer, and safety configuration.
 - `GET /api/status`: balances, queue metrics, blocks, checkpoints, and runtime state.
+- `GET /api/nfts?owner=0x...`: paginated, read-only wallet NFT discovery for Degen Chain. This endpoint is a convenience index and never authorizes a bridge transaction.
 - `GET /api/transfers`: indexed transfer records.
 - `GET /api/transfers/:id`: one transfer by bridge ID.
 - `POST /api/relay`: validates a finalized source-vault event and submits its Base mint.

@@ -7,6 +7,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { createPublicClient, createWalletClient, defineChain, fallback, formatEther, http as viemHttp, parseAbiItem } from 'viem';
 import { sourceAbi, mirrorAbi, erc721MetadataAbi, erc1155MetadataAbi } from './abis.js';
 import { loadState, saveState } from './state.js';
+import { discoverOwnedNfts, NftDiscoveryError } from './nftDiscovery.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const docsRoot = path.resolve(here, '../docs');
@@ -35,6 +36,7 @@ export function readConfig(env = process.env) {
   const sourceIsDegen = sourceChainId === 666666666;
   const sourceSymbol = env.SOURCE_CURRENCY_SYMBOL || (sourceIsDegen ? 'DEGEN' : 'ETH');
   const sourceName = env.SOURCE_CHAIN_NAME || (sourceIsDegen ? 'Degen Chain' : sourceChainId === 11155111 ? 'Ethereum Sepolia' : `Source chain ${sourceChainId}`);
+  const sourceExplorerUrl = env.SOURCE_EXPLORER_URL || (sourceIsDegen ? 'https://explorer.degen.tips' : '');
   const sourceChain = defineChain({ id: sourceChainId, name: sourceName, nativeCurrency: { name: sourceSymbol === 'ETH' ? 'Ether' : sourceSymbol, symbol: sourceSymbol, decimals: 18 }, rpcUrls: { default: { http: [sourceRpcUrl] } } });
   const destinationChain = defineChain({ id: destinationChainId, name: destinationChainId === 8453 ? 'Base' : 'Base Sepolia', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: destinationRpcUrls } } });
   const privateKey = env.RELAYER_PRIVATE_KEY && /^0x[0-9a-fA-F]{64}$/.test(env.RELAYER_PRIVATE_KEY) ? env.RELAYER_PRIVATE_KEY : null;
@@ -59,7 +61,7 @@ export function readConfig(env = process.env) {
       : 'Relaying is disabled by the operator.';
 
   return {
-    sourceChain, destinationChain, sourceRpcUrl, destinationRpcUrl, destinationRpcUrls, account, relayerAddress,
+    sourceChain, destinationChain, sourceRpcUrl, destinationRpcUrl, destinationRpcUrls, sourceExplorerUrl, account, relayerAddress,
     sourceVault: address(env.SOURCE_VAULT_ADDRESS, 'SOURCE_VAULT_ADDRESS'),
     mirror: address(env.BASE_MIRROR_ADDRESS, 'BASE_MIRROR_ADDRESS'),
     sourceStartBlock: BigInt(env.SOURCE_START_BLOCK || 0),
@@ -317,6 +319,10 @@ export function createHttpServer(relayer, config, statusService = createStatusSe
       if (request.method === 'GET' && url.pathname === '/healthz') return sendJson(response, 200, { ok: true, service: 'degen-base-nft-bridge', relayEnabled: config.relayEnabled }, config.corsOrigin);
       if (request.method === 'GET' && (url.pathname === '/health' || url.pathname === '/api/status')) return sendJson(response, 200, await statusService.status(), config.corsOrigin);
       if (request.method === 'GET' && url.pathname === '/api/config') return sendJson(response, 200, await statusService.publicConfig(), config.corsOrigin);
+      if (request.method === 'GET' && url.pathname === '/api/nfts') {
+        const result = await discoverOwnedNfts({ owner: url.searchParams.get('owner'), sourceChainId: config.sourceChain.id, explorerUrl: config.sourceExplorerUrl, cursor: url.searchParams.get('cursor'), limit: url.searchParams.get('limit') });
+        return sendJson(response, 200, result, config.corsOrigin);
+      }
       if (request.method === 'GET' && (url.pathname === '/transfers' || url.pathname === '/api/transfers')) return sendJson(response, 200, { transfers: statusService.transfers() }, config.corsOrigin);
       if (request.method === 'GET' && url.pathname.startsWith('/api/transfers/')) {
         const id = decodeURIComponent(url.pathname.slice('/api/transfers/'.length));
@@ -332,6 +338,7 @@ export function createHttpServer(relayer, config, statusService = createStatusSe
       response.writeHead(200, { 'content-type': contentTypes[path.extname(file)] || 'application/octet-stream', 'cache-control': path.extname(file) === '.html' ? 'no-cache' : 'public, max-age=300' });
       fs.createReadStream(file).pipe(response);
     } catch (error) {
+      if (error instanceof NftDiscoveryError) return sendJson(response, error.statusCode, { error: error.message, code: error.code }, config.corsOrigin);
       sendJson(response, 500, { error: 'internal server error', message: error.message }, config.corsOrigin);
     }
   });
