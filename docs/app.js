@@ -503,10 +503,10 @@ async function transactionAction() {
 $('transaction-action').addEventListener('click', transactionAction);
 
 async function fundRelayer(event) {
-  event.preventDefault(); if (!state.account) await connectWallet(); if (!state.account) return; const input = event.currentTarget.querySelector('input');
+  event.preventDefault(); const form = event.currentTarget; const input = form.querySelector('input'); if (!state.account) await connectWallet(); if (!state.account) return;
   if (!input.value || Number(input.value) <= 0) return toast('Enter an amount greater than zero.', 'error');
   let chain;
-  try { await requireSafeRoute(false); const chainKey = event.currentTarget.dataset.chain; chain = chainKey === 'base' ? state.config.destination : state.config.source; await switchChain(chain); const wallet = createWalletClient({ account: state.account, chain: { id: chain.chainId, name: chain.name, nativeCurrency: { name: chain.currency === 'ETH' ? 'Ether' : chain.currency, symbol: chain.currency, decimals: 18 }, rpcUrls: { default: { http: chain.rpcUrls?.length ? chain.rpcUrls : [chain.rpcUrl] } } }, transport: custom(activeProvider()) }); const hash = await wallet.sendTransaction({ account: state.account, chain: wallet.chain, to: state.config.relayer, value: parseEther(input.value) }); toast(`${chain.currency} top-up submitted: ${short(hash)}`, 'success'); input.value = ''; setTimeout(() => loadStatus(true), 5000); }
+  try { await requireSafeRoute(false); const chainKey = form.dataset.chain; chain = chainKey === 'base' ? state.config.destination : state.config.source; await switchChain(chain); const wallet = createWalletClient({ account: state.account, chain: { id: chain.chainId, name: chain.name, nativeCurrency: { name: chain.currency === 'ETH' ? 'Ether' : chain.currency, symbol: chain.currency, decimals: 18 }, rpcUrls: { default: { http: chain.rpcUrls?.length ? chain.rpcUrls : [chain.rpcUrl] } } }, transport: custom(activeProvider()) }); const hash = await wallet.sendTransaction({ account: state.account, chain: wallet.chain, to: state.config.relayer, value: parseEther(input.value) }); toast(`${chain.currency} top-up submitted: ${short(hash)}`, 'success'); input.value = ''; setTimeout(() => loadStatus(true), 5000); }
   catch (error) { if (/\b429\b|rate.?limit|too many requests|routeme/i.test(error?.shortMessage || error?.message || String(error))) $('wallet-rpc-help').hidden = false; toast(errorMessage(error, chain), 'error'); }
 }
 document.querySelectorAll('.fund-form').forEach(form => form.addEventListener('submit', fundRelayer));
