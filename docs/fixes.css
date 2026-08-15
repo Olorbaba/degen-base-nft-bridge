@@ -297,7 +297,7 @@
   top: calc(100% + 8px);
   right: 0;
   z-index: 40;
-  width: 190px;
+  width: 224px;
   padding: 6px;
   border: 1px solid var(--line-light);
   border-radius: var(--radius);
@@ -346,6 +346,14 @@
   display: none;
 }
 
+.wallet-provider-heading {
+  padding: 7px 9px 5px;
+  color: var(--muted);
+  font: 9px var(--mono);
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .wallet-provider {
   display: flex !important;
   align-items: center;
@@ -357,6 +365,30 @@
   height: 18px;
   border-radius: 4px;
   background: #fff;
+}
+
+.wallet-provider-more-toggle {
+  margin-top: 3px;
+  border-top: 1px solid var(--line) !important;
+  border-radius: 0 0 5px 5px !important;
+  color: var(--muted) !important;
+}
+
+.wallet-provider-more-toggle::after {
+  content: '\203A';
+  float: right;
+  font-size: 16px;
+  line-height: 11px;
+  transform: rotate(90deg);
+  transition: transform .16s ease;
+}
+
+.wallet-provider-more-toggle[aria-expanded="true"]::after {
+  transform: rotate(-90deg);
+}
+
+.wallet-provider-more[hidden] {
+  display: none;
 }
 
 @media (max-width: 640px) {

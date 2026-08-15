@@ -29,3 +29,15 @@ test('frontend publishes Mini App embeds and initializes the Farcaster wallet pr
   assert.match(app, /miniAppSdk\.wallet\.getEthereumProvider/);
   assert.match(app, /miniAppSdk\.actions\.ready/);
 });
+
+test('wallet chooser prioritizes mainstream wallets without blocking other providers', async () => {
+  const app = await readFile('docs/app.js', 'utf8');
+  assert.match(app, /Farcaster & recommended/);
+  assert.match(app, /Other installed wallets/);
+  assert.match(app, /metamask/);
+  assert.match(app, /coinbase/);
+  assert.match(app, /rabby/);
+  assert.match(app, /info\.uuid && item\.info\.uuid === info\.uuid/);
+  assert.match(app, /other\.forEach\(entry => wrapper\.append\(createProviderButton\(entry\)\)\)/);
+  assert.doesNotMatch(app, /blockedWallet|providerDenylist|denylistedProvider/i);
+});

@@ -53,8 +53,29 @@ function providerLabel(provider, info = {}) {
   if (provider?.isMetaMask) return 'MetaMask';
   return 'Browser wallet';
 }
+const preferredWalletMatchers = [
+  /metamask|io\.metamask/,
+  /coinbase|com\.coinbase/,
+  /rabby|io\.rabby/,
+  /brave|com\.brave/,
+  /rainbow|me\.rainbow/,
+  /trust wallet|com\.trustwallet/,
+  /okx|com\.okex/,
+  /zerion|io\.zerion/,
+  /walletconnect/,
+  /phantom|app\.phantom/
+];
+function providerIdentity(entry) {
+  return `${entry?.info?.name || providerLabel(entry?.provider)} ${entry?.info?.rdns || ''}`.toLowerCase();
+}
+function providerPriority(entry) {
+  const identity = providerIdentity(entry);
+  if (state.miniApp && /farcaster|warpcast/.test(identity)) return 0;
+  const preferredIndex = preferredWalletMatchers.findIndex(pattern => pattern.test(identity));
+  return preferredIndex === -1 ? null : preferredIndex + 1;
+}
 function registerProvider(provider, info = {}, preferred = false) {
-  if (!provider || state.providers.some(item => item.provider === provider)) return;
+  if (!provider || state.providers.some(item => item.provider === provider || (info.uuid && item.info.uuid === info.uuid))) return;
   const entry = { provider, info: { ...info, name: providerLabel(provider, info) } };
   if (preferred) state.providers.unshift(entry);
   else state.providers.push(entry);
@@ -285,13 +306,45 @@ function renderProviderList() {
   const list = $('wallet-provider-list');
   list.innerHTML = '';
   const providers = state.providers.length ? state.providers : (window.ethereum ? [{ provider: window.ethereum, info: { name: providerLabel(window.ethereum) } }] : []);
-  for (const entry of providers) {
+  const ranked = providers.map((entry, index) => ({ entry, index, priority: providerPriority(entry) }));
+  const recommended = ranked
+    .filter(item => item.priority !== null)
+    .sort((left, right) => left.priority - right.priority || left.index - right.index)
+    .map(item => item.entry);
+  const other = ranked.filter(item => item.priority === null).map(item => item.entry);
+  const createProviderButton = entry => {
     const button = document.createElement('button');
     button.type = 'button'; button.className = 'wallet-provider'; button.setAttribute('role', 'menuitem');
     if (entry.info.icon) { const image = document.createElement('img'); image.src = entry.info.icon; image.alt = ''; image.referrerPolicy = 'no-referrer'; button.append(image); }
     const label = document.createElement('span'); label.textContent = entry.info.name || providerLabel(entry.provider); button.append(label);
     button.addEventListener('click', () => connectWallet(entry.provider).then(() => { list.hidden = true; $('wallet-menu').hidden = true; updateWalletUi(); }).catch(error => toast(error.shortMessage || error.message, 'error')));
-    list.append(button);
+    return button;
+  };
+  if (recommended.length) {
+    const heading = document.createElement('div');
+    heading.className = 'wallet-provider-heading';
+    heading.textContent = state.miniApp && /farcaster|warpcast/.test(providerIdentity(recommended[0])) ? 'Farcaster & recommended' : 'Recommended wallets';
+    list.append(heading);
+    recommended.forEach(entry => list.append(createProviderButton(entry)));
+  }
+  if (other.length) {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'wallet-provider-more-toggle';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.textContent = `Other installed wallets (${other.length})`;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'wallet-provider-more';
+    wrapper.hidden = true;
+    wrapper.setAttribute('role', 'group');
+    wrapper.setAttribute('aria-label', 'Other installed wallets');
+    other.forEach(entry => wrapper.append(createProviderButton(entry)));
+    toggle.addEventListener('click', event => {
+      event.stopPropagation();
+      wrapper.hidden = !wrapper.hidden;
+      toggle.setAttribute('aria-expanded', wrapper.hidden ? 'false' : 'true');
+    });
+    list.append(toggle, wrapper);
   }
   list.hidden = providers.length === 0;
 }
