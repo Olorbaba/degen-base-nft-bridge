@@ -1,4 +1,5 @@
 import { createPublicClient, createWalletClient, custom, decodeEventLog, formatEther, getAddress, http, isAddress, parseEther } from './vendor/viem.js';
+import { sdk as miniAppSdk } from './vendor/farcaster-miniapp.js';
 
 const PUBLIC_PRODUCTION_API = 'https://degen-base-nft-bridge-production.up.railway.app';
 const API_BASE = window.BRIDGE_API_URL || (location.hostname.endsWith('github.io') ? PUBLIC_PRODUCTION_API : location.origin);
@@ -28,7 +29,7 @@ const nftAbi = [
   { type: 'function', name: 'setApprovalForAll', stateMutability: 'nonpayable', inputs: [{ type: 'address' }, { type: 'bool' }], outputs: [] }
 ];
 
-const state = { config: null, status: null, transfers: [], account: null, wallet: null, provider: null, providerListener: null, providers: [], nft: null, nftPicker: { items: [], nextCursor: null, loading: false, loadedFor: null }, filter: 'all', apiOnline: false, routeTrusted: false };
+const state = { config: null, status: null, transfers: [], account: null, wallet: null, provider: null, providerListener: null, providers: [], miniApp: false, nft: null, nftPicker: { items: [], nextCursor: null, loading: false, loadedFor: null }, filter: 'all', apiOnline: false, routeTrusted: false };
 const $ = id => document.getElementById(id);
 const short = (value, head = 6, tail = 4) => value ? `${value.slice(0, head)}…${value.slice(-tail)}` : '—';
 const formatBalance = value => {
@@ -52,9 +53,11 @@ function providerLabel(provider, info = {}) {
   if (provider?.isMetaMask) return 'MetaMask';
   return 'Browser wallet';
 }
-function registerProvider(provider, info = {}) {
+function registerProvider(provider, info = {}, preferred = false) {
   if (!provider || state.providers.some(item => item.provider === provider)) return;
-  state.providers.push({ provider, info: { ...info, name: providerLabel(provider, info) } });
+  const entry = { provider, info: { ...info, name: providerLabel(provider, info) } };
+  if (preferred) state.providers.unshift(entry);
+  else state.providers.push(entry);
 }
 function activeProvider() {
   if (state.provider) return state.provider;
@@ -69,6 +72,17 @@ function discoverWalletProviders() {
 }
 window.addEventListener('eip6963:announceProvider', event => registerProvider(event.detail?.provider, event.detail?.info));
 discoverWalletProviders();
+
+async function initializeMiniApp() {
+  try {
+    if (!await miniAppSdk.isInMiniApp()) return;
+    state.miniApp = true;
+    registerProvider(miniAppSdk.wallet.ethProvider, { name: 'Farcaster wallet' }, true);
+    await miniAppSdk.actions.ready();
+  } catch (error) {
+    console.warn('Farcaster Mini App initialization failed.', error);
+  }
+}
 
 function toast(message, type = '') { const item = document.createElement('div'); item.className = `toast ${type}`; item.textContent = message; $('toast-region').append(item); setTimeout(() => item.remove(), 5200); }
 function errorMessage(error, chain) {
@@ -543,6 +557,7 @@ $('verify-button').addEventListener('click', async () => {
   finally { button.disabled = false; button.textContent = 'Verify on-chain'; }
 });
 
+await initializeMiniApp();
 wireProof();
 await loadConfig();
 await loadStatus(true);

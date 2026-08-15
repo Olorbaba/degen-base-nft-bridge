@@ -10,11 +10,14 @@
     "verify:deployment": "node scripts/verify-deployment.mjs",
     "test:controlled:1155": "node scripts/controlled-test-1155.mjs",
     "test": "node --test test/*.test.js",
-    "build:frontend": "esbuild src/browserViem.js --bundle --format=esm --platform=browser --target=es2020 --outfile=docs/vendor/viem.js --minify",
+    "build:viem": "esbuild src/browserViem.js --bundle --format=esm --platform=browser --target=es2020 --outfile=docs/vendor/viem.js --minify",
+    "build:miniapp": "esbuild src/browserMiniApp.js --bundle --format=esm --platform=browser --target=es2020 --outfile=docs/vendor/farcaster-miniapp.js --minify",
+    "build:frontend": "npm run build:viem && npm run build:miniapp",
     "build": "npm run build:frontend && forge build"
   },
   "dependencies": {
     "@openzeppelin/contracts": "5.4.0",
+    "@farcaster/miniapp-sdk": "0.3.0",
     "dotenv": "^17.4.2",
     "viem": "^2.50.4"
   },

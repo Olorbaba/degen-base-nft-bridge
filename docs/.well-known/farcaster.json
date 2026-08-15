@@ -1,0 +1,20 @@
+{
+  "miniapp": {
+    "version": "1",
+    "name": "Degen NFT Bridge",
+    "homeUrl": "https://degen-base-nft-bridge-production.up.railway.app/",
+    "iconUrl": "https://degen-base-nft-bridge-production.up.railway.app/assets/miniapp-icon.png",
+    "imageUrl": "https://degen-base-nft-bridge-production.up.railway.app/assets/miniapp-card.png",
+    "ogImageUrl": "https://degen-base-nft-bridge-production.up.railway.app/assets/miniapp-card.png",
+    "buttonTitle": "Bridge an NFT",
+    "splashImageUrl": "https://degen-base-nft-bridge-production.up.railway.app/assets/miniapp-icon.png",
+    "splashBackgroundColor": "#080b0b",
+    "subtitle": "Move NFTs from Degen to Base",
+    "description": "A one-way bridge that locks a Degen Chain NFT and mints its exact metadata to the same address on Base.",
+    "primaryCategory": "utility",
+    "tags": ["nft", "bridge", "degen", "base"],
+    "requiredChains": ["eip155:666666666", "eip155:8453"],
+    "requiredCapabilities": ["wallet.getEthereumProvider", "actions.ready"],
+    "canonicalDomain": "degen-base-nft-bridge-production.up.railway.app"
+  }
+}

@@ -1,7 +1,6 @@
 export const SECURITY_HEADERS = {
-  'content-security-policy': "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://rpc.degen.tips https://explorer.degen.tips https://mainnet.base.org https://base-rpc.publicnode.com https://base.llamarpc.com https://ethereum-sepolia-rpc.publicnode.com https://base-sepolia-rpc.publicnode.com https://base-sepolia.drpc.org https://sepolia.base.org",
+  'content-security-policy': "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors https://farcaster.xyz https://*.farcaster.xyz https://warpcast.com https://*.warpcast.com; form-action 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://rpc.degen.tips https://explorer.degen.tips https://mainnet.base.org https://base-rpc.publicnode.com https://base.llamarpc.com https://ethereum-sepolia-rpc.publicnode.com https://base-sepolia-rpc.publicnode.com https://base-sepolia.drpc.org https://sepolia.base.org",
   'x-content-type-options': 'nosniff',
-  'x-frame-options': 'DENY',
   'referrer-policy': 'no-referrer',
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
   'strict-transport-security': 'max-age=31536000; includeSubDomains'

@@ -6,6 +6,8 @@ A centralized, one-way ERC-721/ERC-1155 bridge for Degen Chain → Base. The pro
 
 Production application and status API: **https://degen-base-nft-bridge-production.up.railway.app**
 
+Farcaster Mini App manifest: **https://degen-base-nft-bridge-production.up.railway.app/.well-known/farcaster.json**
+
 Retained Ethereum Sepolia → Base Sepolia demo: **https://degen-base-nft-bridge.vercel.app**
 
 ## Architecture
@@ -49,6 +51,12 @@ The application includes four operational views:
 The server-provided production configuration exposes the live Degen → Base route. The relayer is protected by explicit production flags and a dedicated low-balance key stored only in Railway encrypted variables.
 
 If an injected wallet has a rate-limited Base RPC saved, use **Relayer → Repair wallet RPC** and replace it with a stable Base mainnet endpoint such as `https://mainnet.base.org`.
+
+## Farcaster Mini App
+
+The production app includes the Farcaster Mini App SDK, a signed-manifest-ready `/.well-known/farcaster.json` endpoint, and `fc:frame`/`fc:miniapp` feed metadata. When opened inside Farcaster, the app prefers the host-provided wallet provider; outside Farcaster it keeps using the existing injected-wallet picker. The wallet address used by a Mini App user can be completely different from the deployer, mirror owner, and relayer addresses.
+
+Before Farcaster discovery is enabled, the operator must claim `degen-base-nft-bridge-production.up.railway.app` with the Farcaster Mini App Manifest Tool and replace the unsigned manifest with the returned `accountAssociation` object. This requires a Farcaster custody signature, not a contract transaction and not a private key stored in this repository.
 
 Independently verify the live test deployment without a wallet or private key:
 

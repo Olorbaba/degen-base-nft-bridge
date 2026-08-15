@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SECURITY_HEADERS, createRateLimiter, requestClientKey } from '../src/httpSecurity.js';
 
-test('security policy blocks framing and remote scripts', () => {
-  assert.match(SECURITY_HEADERS['content-security-policy'], /frame-ancestors 'none'/);
+test('security policy limits framing to Farcaster clients and blocks remote scripts', () => {
+  assert.match(SECURITY_HEADERS['content-security-policy'], /frame-ancestors https:\/\/farcaster\.xyz https:\/\/\*\.farcaster\.xyz/);
+  assert.doesNotMatch(SECURITY_HEADERS['content-security-policy'], /frame-ancestors 'none'/);
+  assert.equal(SECURITY_HEADERS['x-frame-options'], undefined);
   assert.match(SECURITY_HEADERS['content-security-policy'], /script-src 'self'/);
   assert.equal(SECURITY_HEADERS['x-content-type-options'], 'nosniff');
   assert.equal(SECURITY_HEADERS['referrer-policy'], 'no-referrer');

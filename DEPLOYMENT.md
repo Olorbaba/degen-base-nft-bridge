@@ -9,6 +9,16 @@
 
 The vault was deployed in Degen block `26961814`. The mirror was deployed in Base block `49975989`. The Base mirror owner is `0xbFdD3790aBb0768FAe791cf1c551F15Aa7Bb498f` and the only authorized mint relayer is `0x96D743afDcAaFd99d2fBD70A6949f41cDd2B282D`.
 
+## Farcaster Mini App
+
+The same Railway application is Mini App-ready at:
+
+`https://degen-base-nft-bridge-production.up.railway.app/.well-known/farcaster.json`
+
+It serves the official Mini App SDK bundle, a square icon, a feed card, and the required embed metadata. The host wallet is selected only when the app is opened inside Farcaster; it can be a different address from the deployer, mirror owner, or relayer and should be the address holding the source NFT.
+
+The manifest is intentionally unsigned until the operator claims the Railway domain with Farcaster's Mini App Manifest Tool. After claiming, publish the tool's `accountAssociation` object alongside the existing `miniapp` object. This is an off-chain Farcaster domain-ownership signature and does not change either bridge contract.
+
 ## Behaviour
 
 - `DegenNftVault` accepts one ERC-721 or one ERC-1155 unit only through `bridge(collection, tokenId)`.
@@ -24,7 +34,19 @@ npm install
 npm run verify:deployment
 ```
 
-This checks runtime bytecode on both chains, the source deposit count, and Base mirror owner/relayer values. Production relaying stays locked until the hosted Railway service, durable state volume, and controlled pilot have been verified.
+This checks runtime bytecode on both chains, the source deposit count, and Base mirror owner/relayer values.
+
+## Controlled production smoke test
+
+Before accepting real user NFTs, one newly deployed valueless ERC-721 was used to verify the complete production path:
+
+- Source collection: `0x4f0C8ad918225Aa84cd0732Ba0a74704F1366ED7`, token `1`
+- Degen bridge transaction: `0xd687c59dbb0aed1de0803fd757a9beff5679e1df5e924f516c5ab8c347544c6f` (block `26961936`)
+- Bridge ID: `0x9a4d2a0aa25e1fe19fc4cbed14368350ad4ba5be6de2fe62f082f8d59c45f07d`
+- Base mint transaction: `0x0d2adfa1d32e99e92842a5539cc648bdbac3406542b185c855cb181a699d991a` (block `49980953`)
+- Base mirror token: `1`
+
+The source NFT is held by the Degen vault, the Base token is owned by the original holder, and the complete 369-character inline metadata URI is byte-for-byte identical. A duplicate mint simulation reverted with `already minted`. The Railway relayer is live with durable state and an empty queue after this completed transfer.
 
 ## Historical testnet reference
 
