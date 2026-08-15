@@ -6,6 +6,11 @@ const productionUrl = 'https://degen-base-nft-bridge-production.up.railway.app/'
 
 test('Farcaster manifest points to the production bridge and local assets', async () => {
   const manifest = JSON.parse(await readFile('docs/.well-known/farcaster.json', 'utf8'));
+  const associationHeader = JSON.parse(Buffer.from(manifest.accountAssociation.header, 'base64url').toString());
+  const associationPayload = JSON.parse(Buffer.from(manifest.accountAssociation.payload, 'base64url').toString());
+  assert.equal(associationHeader.fid, 212672);
+  assert.equal(associationPayload.domain, new URL(productionUrl).hostname);
+  assert.ok(manifest.accountAssociation.signature);
   assert.equal(manifest.miniapp.version, '1');
   assert.equal(manifest.miniapp.name, 'Degen NFT Bridge');
   assert.equal(manifest.miniapp.homeUrl, productionUrl);

@@ -1,4 +1,9 @@
 {
+  "accountAssociation": {
+    "header": "eyJmaWQiOjIxMjY3MiwidHlwZSI6ImF1dGgiLCJrZXkiOiIweGFmMjFENkY3NDczNjdGZTA5OUI1OWI3NWYwQWI4ZjRmZWU0QjM1QjkifQ",
+    "payload": "eyJkb21haW4iOiJkZWdlbi1iYXNlLW5mdC1icmlkZ2UtcHJvZHVjdGlvbi51cC5yYWlsd2F5LmFwcCJ9",
+    "signature": "jvZG8ngcwzPmaSrehyThJc8DzjuKdsXClJ3V9mDylUJP3pzpc1QPmzRU6AfyPjbjd8jPY/RIyJzE/iJHVZWDLBw="
+  },
   "miniapp": {
     "version": "1",
     "name": "Degen NFT Bridge",
