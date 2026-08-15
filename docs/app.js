@@ -77,7 +77,8 @@ async function initializeMiniApp() {
   try {
     if (!await miniAppSdk.isInMiniApp()) return;
     state.miniApp = true;
-    registerProvider(miniAppSdk.wallet.ethProvider, { name: 'Farcaster wallet' }, true);
+    const provider = await miniAppSdk.wallet.getEthereumProvider();
+    if (provider) registerProvider(provider, { name: 'Farcaster wallet' }, true);
     await miniAppSdk.actions.ready();
   } catch (error) {
     console.warn('Farcaster Mini App initialization failed.', error);
