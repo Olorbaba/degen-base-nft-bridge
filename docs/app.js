@@ -1,5 +1,5 @@
-import { createPublicClient, createWalletClient, custom, decodeEventLog, encodeFunctionData, formatEther, getAddress, http, isAddress, parseEther } from './vendor/viem.js';
-import { sdk as miniAppSdk } from './vendor/farcaster-miniapp.js';
+import { createPublicClient, createWalletClient, custom, decodeEventLog, encodeFunctionData, formatEther, getAddress, http, isAddress, parseEther } from './vendor/viem.js?v=20260817.1';
+import { sdk as miniAppSdk } from './vendor/farcaster-miniapp.js?v=20260817.1';
 
 const PUBLIC_PRODUCTION_API = 'https://degen-base-nft-bridge-production.up.railway.app';
 const API_BASE = window.BRIDGE_API_URL || (location.hostname.endsWith('github.io') ? PUBLIC_PRODUCTION_API : location.origin);

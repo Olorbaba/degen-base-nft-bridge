@@ -26,6 +26,8 @@ test('frontend publishes Mini App embeds and initializes the Farcaster wallet pr
   assert.match(html, /name="fc:frame"/);
   assert.match(html, /name="fc:miniapp"/);
   assert.match(html, /launch_miniapp/);
+  assert.match(html, /app\.js\?v=20260817\.1/);
+  assert.match(app, /vendor\/viem\.js\?v=20260817\.1/);
   assert.match(app, /miniAppSdk\.wallet\.getEthereumProvider/);
   assert.match(app, /miniAppSdk\.actions\.ready/);
 });

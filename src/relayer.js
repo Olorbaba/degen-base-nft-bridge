@@ -366,6 +366,9 @@ export function createStatusService(config, relayer) {
 }
 
 const contentTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json; charset=utf-8' };
+export function staticCacheControl(file) {
+  return ['.html', '.js', '.css', '.json'].includes(path.extname(file)) ? 'no-cache' : 'public, max-age=300';
+}
 function sendJson(response, status, value, corsOrigin) {
   applySecurityHeaders((name, value) => response.setHeader(name, value));
   response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': corsOrigin, 'cache-control': 'no-store' });
@@ -442,7 +445,10 @@ export function createHttpServer(relayer, config, statusService = createStatusSe
       const fileStat = fs.statSync(file);
       if (!fileStat.isFile()) return sendJson(response, 404, { error: 'not found' }, config.corsOrigin);
       applySecurityHeaders((name, value) => response.setHeader(name, value));
-      response.writeHead(200, { 'content-type': contentTypes[path.extname(file)] || 'application/octet-stream', 'content-length': fileStat.size, 'cache-control': path.extname(file) === '.html' ? 'no-cache' : 'public, max-age=300' });
+      const etag = `"${fileStat.size.toString(16)}-${Math.trunc(fileStat.mtimeMs).toString(16)}"`;
+      const headers = { 'content-type': contentTypes[path.extname(file)] || 'application/octet-stream', 'cache-control': staticCacheControl(file), etag };
+      if (request.headers['if-none-match'] === etag) { response.writeHead(304, headers); response.end(); return; }
+      response.writeHead(200, { ...headers, 'content-length': fileStat.size });
       if (request.method === 'HEAD') return response.end();
       fs.createReadStream(file).pipe(response);
     } catch (error) {
