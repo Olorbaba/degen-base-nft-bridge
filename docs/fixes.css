@@ -60,6 +60,12 @@
   gap: 12px;
 }
 
+.picker-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
 .picker-toolbar strong,
 .picker-toolbar small {
   display: block;
@@ -86,6 +92,15 @@
   padding: 7px 9px;
   font-size: 9px;
   font-weight: 700;
+}
+
+#batch-mode[aria-pressed="true"] {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+#nft-form[aria-disabled="true"] {
+  opacity: .55;
 }
 
 .picker-search {
@@ -135,6 +150,7 @@
 }
 
 .nft-picker-card {
+  position: relative;
   display: grid;
   grid-template-columns: 52px minmax(0, 1fr);
   gap: 9px;
@@ -146,6 +162,41 @@
   background: var(--surface-2);
   color: var(--text);
   text-align: left;
+}
+
+.nft-picker-card.batch-selectable {
+  padding-right: 34px;
+}
+
+.nft-picker-card.selected {
+  border-color: var(--green);
+  background: #b6ff4708;
+}
+
+.batch-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line-light);
+  border-radius: 4px;
+  color: var(--green-dark);
+  background: var(--surface-3);
+  font: 7px var(--mono);
+}
+
+.nft-picker-card.selected .batch-check {
+  border-color: var(--green);
+  background: var(--green);
+}
+
+.nft-picker-card.selected .batch-check::after {
+  content: '\2713';
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .nft-picker-card:hover,
@@ -203,6 +254,171 @@
 
 .picker-more[hidden] {
   display: none;
+}
+
+.batch-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 4px 2px;
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+}
+
+.batch-selection-bar[hidden] {
+  display: none;
+}
+
+.batch-selection-bar > div {
+  display: flex;
+  gap: 6px;
+}
+
+.batch-selection-bar button,
+.batch-panel header button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-light);
+  border-radius: 5px;
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.batch-selection-bar button:disabled {
+  cursor: not-allowed;
+  color: var(--muted-2);
+}
+
+.batch-panel header button:disabled {
+  cursor: not-allowed;
+  color: var(--muted-2);
+}
+
+.batch-selection-bar #review-batch:not(:disabled) {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.batch-panel {
+  margin-top: 20px;
+  padding: 20px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.batch-panel[hidden] {
+  display: none;
+}
+
+.batch-panel header,
+.batch-panel footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.batch-panel h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.batch-list {
+  margin: 16px 0;
+  border-top: 1px solid var(--line);
+}
+
+.batch-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 64px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.batch-row-media {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: #17201c;
+  color: var(--green);
+  font: 8px var(--mono);
+}
+
+.batch-row-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.batch-row strong,
+.batch-row code,
+.batch-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-row strong {
+  font-size: 11px;
+}
+
+.batch-row code,
+.batch-row small {
+  margin-top: 4px;
+  color: var(--muted-2);
+  font: 8px var(--mono);
+}
+
+.batch-row-status {
+  padding: 5px 8px;
+  border-radius: 12px;
+  background: var(--surface-3);
+  color: var(--muted);
+  font: 8px var(--mono);
+  white-space: nowrap;
+}
+
+.batch-row.complete .batch-row-status,
+.batch-row.ready .batch-row-status {
+  color: var(--green);
+  background: #b6ff470e;
+}
+
+.batch-row.error .batch-row-status {
+  color: var(--red);
+  background: #ff716b0e;
+}
+
+.batch-panel footer > div strong,
+.batch-panel footer > div span {
+  display: block;
+}
+
+.batch-panel footer > div strong {
+  font-size: 11px;
+}
+
+.batch-panel footer > div span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.batch-panel footer .primary-action {
+  flex: 0 0 auto;
+  min-width: 160px;
+  padding: 0 16px;
 }
 
 .picker-fallback {
@@ -398,6 +614,27 @@
 
   .wallet-menu {
     right: -4px;
+  }
+
+  .picker-toolbar,
+  .batch-panel footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .picker-actions button,
+  .batch-panel footer .primary-action {
+    flex: 1;
+    width: 100%;
+  }
+
+  .batch-row {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .batch-row-status {
+    grid-column: 2;
+    justify-self: start;
   }
 }
 

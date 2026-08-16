@@ -17,7 +17,7 @@ The same Railway application is Mini App-ready at:
 
 It serves the official Mini App SDK bundle, a square icon, a feed card, and the required embed metadata. The host wallet is selected only when the app is opened inside Farcaster; it can be a different address from the deployer, mirror owner, or relayer and should be the address holding the source NFT.
 
-The manifest is intentionally unsigned until the operator claims the Railway domain with Farcaster's Mini App Manifest Tool. After claiming, publish the tool's `accountAssociation` object alongside the existing `miniapp` object. This is an off-chain Farcaster domain-ownership signature and does not change either bridge contract.
+The Railway domain is associated with Farcaster FID `212672`. Its signed `accountAssociation` is published alongside the `miniapp` object. This is an off-chain Farcaster domain-ownership signature and does not change either bridge contract.
 
 ## Behaviour
 
@@ -26,6 +26,8 @@ The manifest is intentionally unsigned until the operator claims the Railway dom
 - It appends collection, token ID, holder, token standard, amount, exact URI, timestamp, and bridge ID to an on-chain deposit array and emits `NFTBridged`.
 - `BaseNftMirror` mints every finalized deposit into one ERC-721 collection, preserves the complete URI string on-chain, records the source origin, and rejects duplicate bridge IDs.
 - The vault has no release or withdrawal function. Direct transfers are rejected to prevent untracked custody.
+- The web app and Mini App can queue two to five NFTs without changing the deployed contracts. Each selected NFT calls the existing `bridge(collection, tokenId)` function and produces an independent bridge ID and Base mirror token.
+- Wallets with explicit atomic call support can bundle calls. Other wallets use a resumable sequential queue that stops after a rejected transaction and never resubmits a confirmed source lock.
 
 ## Verify without keys
 

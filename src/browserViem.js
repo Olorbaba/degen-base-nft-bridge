@@ -3,6 +3,7 @@ export {
   createWalletClient,
   custom,
   decodeEventLog,
+  encodeFunctionData,
   formatEther,
   getAddress,
   http,

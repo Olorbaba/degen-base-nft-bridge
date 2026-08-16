@@ -2,7 +2,7 @@
 
 A centralized, one-way ERC-721/ERC-1155 bridge for Degen Chain → Base. The production contracts are deployed on Degen mainnet and Base mainnet, and the Railway relayer has passed a controlled end-to-end production smoke test.
 
-> Current release: production bridge live; controlled smoke test completed. Source custody is permanent by design.
+> Current release: production bridge live with single-NFT and five-item batch workflows. Source custody is permanent by design.
 
 Production application and status API: **https://degen-base-nft-bridge-production.up.railway.app**
 
@@ -40,9 +40,9 @@ npm run build
 forge test
 ```
 
-The application includes four operational views:
+The application includes five operational views:
 
-- **Bridge**: wallet connection, network switching, ERC-721/ERC-1155 inspection, metadata preview, approval, and source deposit.
+- **Bridge**: wallet connection, network switching, ERC-721/ERC-1155 inspection, metadata preview, approval, source deposit, and a bounded multi-NFT queue.
 - **Wallet picker**: optional read-only discovery of the connected wallet's Degen NFTs through the public Degen Explorer index. Selecting an item only fills the existing form; direct RPC inspection remains authoritative before any approval or permanent lock.
 - **Transfers**: waiting, submitted, completed, and failed bridge records.
 - **Relayer**: live Degen and Base balances, queue depth, checkpoints, and native-token top-up forms.
@@ -56,7 +56,15 @@ If an injected wallet has a rate-limited Base RPC saved, use **Relayer → Repai
 
 The production app includes the Farcaster Mini App SDK, a signed-manifest-ready `/.well-known/farcaster.json` endpoint, and `fc:frame`/`fc:miniapp` feed metadata. When opened inside Farcaster, the app prefers the host-provided wallet provider; outside Farcaster it keeps using the existing injected-wallet picker. The wallet address used by a Mini App user can be completely different from the deployer, mirror owner, and relayer addresses.
 
-Before Farcaster discovery is enabled, the operator must claim `degen-base-nft-bridge-production.up.railway.app` with the Farcaster Mini App Manifest Tool and replace the unsigned manifest with the returned `accountAssociation` object. This requires a Farcaster custody signature, not a contract transaction and not a private key stored in this repository.
+The Railway domain is associated with Farcaster FID `212672` and the signed `accountAssociation` is published with the Mini App manifest. This is an off-chain Farcaster domain-ownership signature and does not change either bridge contract.
+
+## Batch bridge workflow
+
+The wallet NFT picker can select two to five distinct NFTs for one managed batch. Every item is revalidated directly on Degen Chain before signing and retains its own source collection, source token ID, exact URI, `NFTBridged` event, bridge ID, relayer record, and Base mirror token ID.
+
+Wallets that explicitly advertise atomic call support can submit the approval and bridge calls as a wallet-native batch. Other wallets use a sequential safety queue. The queue stops on a rejected transaction, preserves already confirmed locks, and can resume the remaining items without submitting a confirmed NFT again. ERC-1155 approvals are de-duplicated per collection, while every selected token ID still locks exactly one unit and creates a separate Base ERC-721 mirror.
+
+Batching is a frontend transaction workflow over the existing deployed contracts. The original `bridge(collection, tokenId)` function, single-NFT interface, relayer event processing, contract addresses, and completed transfers are unchanged.
 
 Independently verify the live test deployment without a wallet or private key:
 

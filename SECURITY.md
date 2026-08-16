@@ -8,6 +8,8 @@ Deposits are irreversible. A source NFT is permanently held by the vault and the
 
 The frontend rechecks the server route immediately before every approval, bridge, and relayer-funding transaction. It accepts only the audited production route or the retained Ethereum Sepolia → Base Sepolia reference route. Wallet NFT discovery is read-only and sends only the public wallet address to the configured Degen Explorer endpoint.
 
+Batch selection is capped at five distinct collection/token-ID pairs. Each item is revalidated independently, ERC-1155 approvals are de-duplicated only within the same collection, and every confirmed lock is retained separately with its own transaction and bridge ID. A rejected sequential transaction pauses later items. A wallet-native batch is used only when the connected provider explicitly advertises atomic call support.
+
 Farcaster Mini App support uses the host-provided EIP-1193 wallet only after the official SDK confirms that the page is running inside a Mini App. Normal browser sessions keep the existing wallet picker. Framing is allowed only from Farcaster and Warpcast origins, and the Mini App does not receive relayer, deployer, or mirror-owner credentials.
 
 ## Trust model

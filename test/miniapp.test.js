@@ -41,3 +41,22 @@ test('wallet chooser prioritizes mainstream wallets without blocking other provi
   assert.match(app, /other\.forEach\(entry => wrapper\.append\(createProviderButton\(entry\)\)\)/);
   assert.doesNotMatch(app, /blockedWallet|providerDenylist|denylistedProvider/i);
 });
+
+test('batch bridge keeps the deployed contracts and creates independent bridge records', async () => {
+  const [html, app, vault, mirror] = await Promise.all([
+    readFile('docs/index.html', 'utf8'),
+    readFile('docs/app.js', 'utf8'),
+    readFile('src/DegenNftVault.sol', 'utf8'),
+    readFile('src/BaseNftMirror.sol', 'utf8')
+  ]);
+  assert.match(html, /id="batch-mode"/);
+  assert.match(html, /id="batch-panel"/);
+  assert.match(app, /const MAX_BATCH_SIZE = 5/);
+  assert.match(app, /wallet_sendCalls/);
+  assert.match(app, /runSequentialBatch/);
+  assert.match(app, /args\.collection\.toLowerCase\(\) === item\.collection\.toLowerCase\(\)/);
+  assert.match(app, /item\.locked = true; item\.bridgeId = event\?\.id/);
+  assert.match(vault, /function bridge\(address collection, uint256 tokenId\)/);
+  assert.match(mirror, /mapping\(bytes32 => uint256\) public tokenIdForBridgeId/);
+  assert.match(mirror, /require\(tokenIdForBridgeId\[bridgeId\] == 0, "already minted"\)/);
+});

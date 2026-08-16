@@ -1,4 +1,4 @@
-import { createPublicClient, createWalletClient, custom, decodeEventLog, formatEther, getAddress, http, isAddress, parseEther } from './vendor/viem.js';
+import { createPublicClient, createWalletClient, custom, decodeEventLog, encodeFunctionData, formatEther, getAddress, http, isAddress, parseEther } from './vendor/viem.js';
 import { sdk as miniAppSdk } from './vendor/farcaster-miniapp.js';
 
 const PUBLIC_PRODUCTION_API = 'https://degen-base-nft-bridge-production.up.railway.app';
@@ -29,7 +29,8 @@ const nftAbi = [
   { type: 'function', name: 'setApprovalForAll', stateMutability: 'nonpayable', inputs: [{ type: 'address' }, { type: 'bool' }], outputs: [] }
 ];
 
-const state = { config: null, status: null, transfers: [], account: null, wallet: null, provider: null, providerListener: null, providers: [], miniApp: false, nft: null, nftPicker: { items: [], nextCursor: null, loading: false, loadedFor: null }, filter: 'all', apiOnline: false, routeTrusted: false };
+const state = { config: null, status: null, transfers: [], account: null, wallet: null, provider: null, providerListener: null, providers: [], miniApp: false, nft: null, nftPicker: { items: [], nextCursor: null, loading: false, loadedFor: null }, batch: { selecting: false, selected: new Map(), items: [], preparing: false, running: false, walletBatch: false }, filter: 'all', apiOnline: false, routeTrusted: false };
+const MAX_BATCH_SIZE = 5;
 const $ = id => document.getElementById(id);
 const short = (value, head = 6, tail = 4) => value ? `${value.slice(0, head)}…${value.slice(-tail)}` : '—';
 const formatBalance = value => {
@@ -398,6 +399,7 @@ function mediaUrl(uri) { if (!uri) return ''; if (uri.startsWith('ipfs://')) ret
 
 function resetNftPicker(close = false) {
   state.nftPicker = { items: [], nextCursor: null, loading: false, loadedFor: null };
+  resetBatchState();
   $('nft-picker-list').innerHTML = '';
   $('nft-picker-search').value = '';
   $('nft-picker-status').className = 'picker-status';
@@ -407,6 +409,47 @@ function resetNftPicker(close = false) {
     $('nft-picker-panel').hidden = true;
     $('toggle-nft-picker').setAttribute('aria-expanded', 'false');
   }
+}
+
+function nftKey(item) { return `${String(item.collection).toLowerCase()}:${String(item.tokenId)}`; }
+function resetSingleNft() {
+  state.nft = null;
+  $('nft-preview').hidden = true;
+  $('transaction-action').hidden = true;
+  $('transaction-note').textContent = '';
+  $('step-inspect').classList.add('current');
+  $('step-inspect').classList.remove('complete');
+  $('step-approve').classList.remove('current', 'complete');
+  $('step-bridge').classList.remove('current', 'complete');
+}
+function setSingleFormDisabled(disabled) {
+  [...$('nft-form').elements].forEach(element => { element.disabled = disabled; });
+  $('nft-form').setAttribute('aria-disabled', disabled ? 'true' : 'false');
+}
+function resetBatchState() {
+  state.batch = { selecting: false, selected: new Map(), items: [], preparing: false, running: false, walletBatch: false };
+  $('batch-panel').hidden = true;
+  $('batch-selection-bar').hidden = true;
+  $('batch-mode').setAttribute('aria-pressed', 'false');
+  $('batch-mode').textContent = 'Select multiple';
+  $('bridge-steps').hidden = false;
+  setSingleFormDisabled(false);
+}
+function renderBatchSelection() {
+  const count = state.batch.selected.size;
+  $('batch-selection-count').textContent = count;
+  $('batch-selection-bar').hidden = !state.batch.selecting;
+  $('review-batch').disabled = count < 2 || state.batch.preparing || state.batch.running;
+}
+function toggleBatchItem(item) {
+  const key = nftKey(item);
+  if (state.batch.selected.has(key)) state.batch.selected.delete(key);
+  else {
+    if (state.batch.selected.size >= MAX_BATCH_SIZE) return toast(`A batch can contain up to ${MAX_BATCH_SIZE} NFTs.`, 'error');
+    state.batch.selected.set(key, item);
+  }
+  renderNftPicker();
+  renderBatchSelection();
 }
 
 function pickerMatches(item, query) {
@@ -422,6 +465,14 @@ function renderNftPicker() {
   for (const item of items) {
     const button = document.createElement('button');
     button.type = 'button'; button.className = 'nft-picker-card';
+    const selected = state.batch.selected.has(nftKey(item));
+    if (state.batch.selecting) {
+      button.classList.add('batch-selectable');
+      button.classList.toggle('selected', selected);
+      button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      const check = document.createElement('span'); check.className = 'batch-check'; check.setAttribute('aria-hidden', 'true');
+      button.append(check);
+    }
     const imageUrl = mediaUrl(item.image);
     if (imageUrl) {
       const image = document.createElement('img'); image.src = imageUrl; image.alt = ''; image.loading = 'lazy'; image.decoding = 'async'; image.referrerPolicy = 'no-referrer';
@@ -436,6 +487,7 @@ function renderNftPicker() {
     const identity = document.createElement('code'); identity.textContent = item.standard === 'ERC-1155' ? `${item.standard} · #${item.tokenId} · balance ${item.amount}` : `${item.standard} · #${item.tokenId}`;
     details.append(name, collection, identity); button.append(details);
     button.addEventListener('click', async () => {
+      if (state.batch.selecting) return toggleBatchItem(item);
       $('collection-address').value = item.collection;
       $('token-id').value = item.tokenId;
       $('nft-picker-panel').hidden = true;
@@ -449,9 +501,10 @@ function renderNftPicker() {
     $('nft-picker-status').className = 'picker-status';
     if (query && !items.length) $('nft-picker-status').textContent = 'No loaded NFTs match this search.';
     else if (!state.nftPicker.items.length) $('nft-picker-status').textContent = 'No ERC-721 or ERC-1155 NFTs were found for this wallet.';
-    else $('nft-picker-status').textContent = `${state.nftPicker.items.length} NFT${state.nftPicker.items.length === 1 ? '' : 's'} loaded. Select one to verify it.`;
+    else $('nft-picker-status').textContent = state.batch.selecting ? `${state.nftPicker.items.length} NFTs loaded. Select 2 to ${MAX_BATCH_SIZE} for this batch.` : `${state.nftPicker.items.length} NFT${state.nftPicker.items.length === 1 ? '' : 's'} loaded. Select one to verify it.`;
   }
   $('load-more-nfts').hidden = !state.nftPicker.nextCursor || !!query;
+  renderBatchSelection();
 }
 
 async function loadOwnedNfts(append = false) {
@@ -493,6 +546,56 @@ $('toggle-nft-picker').addEventListener('click', async () => {
 $('refresh-nft-picker').addEventListener('click', () => loadOwnedNfts());
 $('load-more-nfts').addEventListener('click', () => loadOwnedNfts(true));
 $('nft-picker-search').addEventListener('input', renderNftPicker);
+$('batch-mode').addEventListener('click', () => {
+  state.batch.selecting = !state.batch.selecting;
+  state.batch.selected.clear(); state.batch.items = [];
+  $('batch-mode').setAttribute('aria-pressed', state.batch.selecting ? 'true' : 'false');
+  $('batch-mode').textContent = state.batch.selecting ? 'Cancel batch' : 'Select multiple';
+  $('batch-panel').hidden = true;
+  $('bridge-steps').hidden = state.batch.selecting;
+  setSingleFormDisabled(state.batch.selecting);
+  if (state.batch.selecting) resetSingleNft();
+  renderNftPicker(); renderBatchSelection();
+});
+$('clear-batch-selection').addEventListener('click', () => { state.batch.selected.clear(); renderNftPicker(); renderBatchSelection(); });
+$('edit-batch').addEventListener('click', () => {
+  $('batch-panel').hidden = true;
+  $('nft-picker-panel').hidden = false;
+  $('toggle-nft-picker').setAttribute('aria-expanded', 'true');
+  state.batch.selecting = true;
+  renderNftPicker(); renderBatchSelection();
+});
+
+async function readNftDetails(collection, tokenId, client = createPublicClient({ transport: http(state.config.source.rpcUrl, { retryCount: 3 }) })) {
+  const [is721, is1155] = await Promise.all([
+    client.readContract({ address: collection, abi: nftAbi, functionName: 'supportsInterface', args: ['0x80ac58cd'] }).catch(() => false),
+    client.readContract({ address: collection, abi: nftAbi, functionName: 'supportsInterface', args: ['0xd9b67a26'] }).catch(() => false)
+  ]);
+  if (is721 === is1155) throw new Error('Collection must implement exactly one supported standard: ERC-721 or ERC-1155.');
+  let owner; let tokenUri; let approved; let standard; let amount = 1n;
+  if (is721) {
+    standard = 'ERC-721';
+    [owner, tokenUri] = await Promise.all([
+      client.readContract({ address: collection, abi: nftAbi, functionName: 'ownerOf', args: [tokenId] }),
+      client.readContract({ address: collection, abi: nftAbi, functionName: 'tokenURI', args: [tokenId] })
+    ]);
+    const [approvedAddress, approvedForAll] = await Promise.all([
+      client.readContract({ address: collection, abi: nftAbi, functionName: 'getApproved', args: [tokenId] }).catch(() => null),
+      client.readContract({ address: collection, abi: nftAbi, functionName: 'isApprovedForAll', args: [owner, state.config.source.vault] }).catch(() => false)
+    ]);
+    approved = approvedForAll || approvedAddress?.toLowerCase() === state.config.source.vault.toLowerCase();
+  } else {
+    standard = 'ERC-1155'; owner = state.account;
+    if (!owner) throw new Error('Connect the wallet that holds this ERC-1155 token before inspecting it.');
+    [amount, tokenUri, approved] = await Promise.all([
+      client.readContract({ address: collection, abi: nftAbi, functionName: 'balanceOf', args: [owner, tokenId] }),
+      client.readContract({ address: collection, abi: nftAbi, functionName: 'uri', args: [tokenId] }),
+      client.readContract({ address: collection, abi: nftAbi, functionName: 'isApprovedForAll', args: [owner, state.config.source.vault] })
+    ]);
+    if (amount < 1n) throw new Error('Connected wallet has no balance for this ERC-1155 token ID.');
+  }
+  return { collection, tokenId, owner: getAddress(owner), tokenUri, metadata: parseMetadata(tokenUri), approved, standard, amount };
+}
 
 async function inspectNft(event) {
   event.preventDefault(); const collectionValue = $('collection-address').value.trim(); const tokenValue = $('token-id').value.trim();
@@ -501,34 +604,8 @@ async function inspectNft(event) {
   const button = $('inspect-nft'); button.disabled = true; button.textContent = 'Inspecting…';
   try {
     const collection = getAddress(collectionValue); const tokenId = BigInt(tokenValue); const client = createPublicClient({ transport: http(state.config.source.rpcUrl, { retryCount: 3 }) });
-    const [is721, is1155] = await Promise.all([
-      client.readContract({ address: collection, abi: nftAbi, functionName: 'supportsInterface', args: ['0x80ac58cd'] }).catch(() => false),
-      client.readContract({ address: collection, abi: nftAbi, functionName: 'supportsInterface', args: ['0xd9b67a26'] }).catch(() => false)
-    ]);
-    if (is721 === is1155) throw new Error('Collection must implement exactly one supported standard: ERC-721 or ERC-1155.');
-    let owner; let tokenUri; let approved; let standard; let amount = 1n;
-    if (is721) {
-      standard = 'ERC-721';
-      [owner, tokenUri] = await Promise.all([
-        client.readContract({ address: collection, abi: nftAbi, functionName: 'ownerOf', args: [tokenId] }),
-        client.readContract({ address: collection, abi: nftAbi, functionName: 'tokenURI', args: [tokenId] })
-      ]);
-      const [approvedAddress, approvedForAll] = await Promise.all([
-        client.readContract({ address: collection, abi: nftAbi, functionName: 'getApproved', args: [tokenId] }).catch(() => null),
-        client.readContract({ address: collection, abi: nftAbi, functionName: 'isApprovedForAll', args: [owner, state.config.source.vault] }).catch(() => false)
-      ]);
-      approved = approvedForAll || approvedAddress?.toLowerCase() === state.config.source.vault.toLowerCase();
-    } else {
-      standard = 'ERC-1155'; owner = state.account;
-      if (!owner) throw new Error('Connect the wallet that holds this ERC-1155 token before inspecting it.');
-      [amount, tokenUri, approved] = await Promise.all([
-        client.readContract({ address: collection, abi: nftAbi, functionName: 'balanceOf', args: [owner, tokenId] }),
-        client.readContract({ address: collection, abi: nftAbi, functionName: 'uri', args: [tokenId] }),
-        client.readContract({ address: collection, abi: nftAbi, functionName: 'isApprovedForAll', args: [owner, state.config.source.vault] })
-      ]);
-      if (amount < 1n) throw new Error('Connected wallet has no balance for this ERC-1155 token ID.');
-    }
-    const metadata = parseMetadata(tokenUri); state.nft = { collection, tokenId, owner: getAddress(owner), tokenUri, metadata, approved, standard, amount };
+    state.nft = await readNftDetails(collection, tokenId, client);
+    const { owner, metadata, approved, standard } = state.nft;
     $('nft-name').textContent = metadata.name || `Token #${tokenId}`; $('nft-description').textContent = metadata.description || 'No description supplied.'; $('nft-owner').textContent = short(owner); $('nft-owner').title = owner; $('nft-uri-type').textContent = `${standard} · ${metadata.type}`;
     const media = $('nft-media'); media.innerHTML = '<span>NFT</span>'; if (metadata.image) { const image = document.createElement('img'); image.src = mediaUrl(metadata.image); image.alt = metadata.name || 'NFT preview'; image.loading = 'lazy'; image.decoding = 'async'; image.referrerPolicy = 'no-referrer'; image.onerror = () => image.remove(); media.append(image); }
     $('nft-preview').hidden = false; $('step-inspect').classList.add('complete'); $('step-inspect').classList.remove('current'); $('step-approve').classList.toggle('complete', approved); $('step-approve').classList.toggle('current', !approved); $('step-bridge').classList.toggle('current', approved); updateTransactionAction();
@@ -537,6 +614,233 @@ async function inspectNft(event) {
 }
 $('nft-form').addEventListener('submit', inspectNft);
 $('paste-address').addEventListener('click', async () => { try { $('collection-address').value = await navigator.clipboard.readText(); } catch { toast('Clipboard permission was not granted.', 'error'); } });
+
+function batchStatus(item) {
+  if (item.error) return 'Failed';
+  if (item.status === 'checking') return 'Checking';
+  if (item.status === 'approval') return 'Approval required';
+  if (item.status === 'approving') return 'Approving';
+  if (item.status === 'locking' || item.status === 'submitting') return 'Locking';
+  if (item.status === 'minted') return 'Minted on Base';
+  if (item.locked) return item.bridgeId ? 'Mint queued' : 'Locked';
+  return 'Ready';
+}
+function renderBatchPanel() {
+  const list = $('batch-list'); list.innerHTML = '';
+  for (const item of state.batch.items) {
+    const row = document.createElement('article'); row.className = `batch-row ${item.error ? 'error' : item.locked ? 'complete' : item.status || ''}`;
+    const media = document.createElement('span'); media.className = 'batch-row-media';
+    const imageUrl = mediaUrl(item.image || item.metadata?.image);
+    if (imageUrl) { const image = document.createElement('img'); image.src = imageUrl; image.alt = ''; image.loading = 'lazy'; image.referrerPolicy = 'no-referrer'; image.onerror = () => image.remove(); media.append(image); }
+    if (!media.childNodes.length) media.textContent = 'NFT';
+    const details = document.createElement('div');
+    const name = document.createElement('strong'); name.textContent = item.metadata?.name || item.name || `Token #${item.tokenId}`;
+    const origin = document.createElement('code'); origin.textContent = `${short(item.collection)} · #${item.tokenId}`;
+    const mapping = document.createElement('small'); mapping.textContent = item.bridgeId ? `Bridge ${short(item.bridgeId)} · separate Base token` : `${item.standard || 'NFT'} · separate bridge record`;
+    details.append(name, origin, mapping);
+    const status = document.createElement('span'); status.className = 'batch-row-status'; status.textContent = batchStatus(item); if (item.error) status.title = item.error;
+    row.append(media, details, status); list.append(row);
+  }
+  const remaining = state.batch.items.filter(item => !item.locked);
+  const completed = state.batch.items.filter(item => item.locked).length;
+  const hasBlockingErrors = state.batch.items.some(item => item.error && item.errorKind !== 'transaction');
+  $('batch-summary').textContent = state.batch.preparing ? 'Validating selected NFTs' : `${completed} locked · ${remaining.length} remaining`;
+  $('batch-method').textContent = state.batch.walletBatch ? 'Wallet batch available. Each NFT still receives a unique bridge ID.' : 'Sequential safety queue. Each NFT keeps a separate bridge record.';
+  const button = $('batch-action');
+  $('edit-batch').disabled = state.batch.preparing || state.batch.running || state.batch.items.some(item => item.errorKind === 'pending');
+  button.disabled = state.batch.preparing || state.batch.running || hasBlockingErrors || !remaining.length;
+  button.textContent = state.batch.running ? 'Processing batch...' : remaining.length ? `${completed ? 'Resume' : 'Bridge'} ${remaining.length} NFT${remaining.length === 1 ? '' : 's'}` : 'Batch submitted';
+}
+
+async function validateBatchItems(resetErrors = true) {
+  const client = createPublicClient({ transport: http(state.config.source.rpcUrl, { retryCount: 3 }) });
+  for (const item of state.batch.items) {
+    if (item.locked) continue;
+    if (resetErrors) { delete item.error; delete item.errorKind; }
+    item.status = 'checking'; renderBatchPanel();
+    try {
+      const details = await readNftDetails(getAddress(item.collection), BigInt(item.tokenId), client);
+      if (details.owner.toLowerCase() !== state.account.toLowerCase()) throw new Error('Connected wallet no longer owns this NFT.');
+      Object.assign(item, details, { status: details.approved ? 'ready' : 'approval' });
+    } catch (error) {
+      item.status = 'error'; item.errorKind = 'validation'; item.error = error.shortMessage || error.message || 'NFT validation failed.';
+    }
+    renderBatchPanel();
+  }
+}
+
+async function reviewBatch() {
+  if (state.batch.selected.size < 2) return toast('Select at least two NFTs for a batch.', 'error');
+  state.batch.items = [...state.batch.selected.values()].map(item => ({ ...item, collection: String(item.collection), tokenId: String(item.tokenId), status: 'checking', locked: false, bridgeId: null, sourceTxHash: null }));
+  state.batch.preparing = true;
+  $('nft-picker-panel').hidden = true; $('toggle-nft-picker').setAttribute('aria-expanded', 'false');
+  $('batch-panel').hidden = false; $('bridge-steps').hidden = true; resetSingleNft(); renderBatchPanel();
+  try { await validateBatchItems(); }
+  finally { state.batch.preparing = false; renderBatchPanel(); }
+  if (state.batch.items.some(item => item.error)) toast('One or more NFTs failed the on-chain review. Edit the selection before continuing.', 'error');
+}
+$('review-batch').addEventListener('click', () => reviewBatch().catch(error => toast(error.shortMessage || error.message, 'error')));
+
+function sourceWalletClient() {
+  return createWalletClient({ account: state.account, chain: { id: state.config.source.chainId, name: state.config.source.name, nativeCurrency: { name: state.config.source.currency === 'ETH' ? 'Ether' : state.config.source.currency, symbol: state.config.source.currency, decimals: 18 }, rpcUrls: { default: { http: [state.config.source.rpcUrl] } } }, transport: custom(activeProvider()) });
+}
+function approvalCall(item) {
+  return item.standard === 'ERC-1155'
+    ? { to: item.collection, data: encodeFunctionData({ abi: nftAbi, functionName: 'setApprovalForAll', args: [state.config.source.vault, true] }) }
+    : { to: item.collection, data: encodeFunctionData({ abi: nftAbi, functionName: 'approve', args: [state.config.source.vault, item.tokenId] }) };
+}
+function bridgeCall(item) {
+  return { to: state.config.source.vault, data: encodeFunctionData({ abi: sourceAbi, functionName: 'bridge', args: [item.collection, item.tokenId] }) };
+}
+function pendingBatchItems() { return state.batch.items.filter(item => !item.locked && !item.error); }
+function buildBatchCalls(items) {
+  const calls = []; const approved1155 = new Set();
+  for (const item of items) {
+    if (item.approved) continue;
+    const collectionKey = item.collection.toLowerCase();
+    if (item.standard === 'ERC-1155' && approved1155.has(collectionKey)) continue;
+    calls.push(approvalCall(item));
+    if (item.standard === 'ERC-1155') approved1155.add(collectionKey);
+  }
+  items.forEach(item => calls.push(bridgeCall(item)));
+  return calls;
+}
+async function supportsAtomicWalletBatch(provider) {
+  try {
+    const capabilities = await provider.request({ method: 'wallet_getCapabilities', params: [state.account] });
+    const chainId = `0x${state.config.source.chainId.toString(16)}`;
+    const chainCapabilities = capabilities?.[chainId] || capabilities?.[String(state.config.source.chainId)] || {};
+    const atomic = chainCapabilities.atomic || chainCapabilities.atomicBatch;
+    return atomic === true || atomic?.supported === true || ['supported', 'ready'].includes(String(atomic?.status || '').toLowerCase());
+  } catch { return false; }
+}
+async function waitForWalletCalls(provider, bundleId, timeoutMs = 300_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const result = await provider.request({ method: 'wallet_getCallsStatus', params: [bundleId] });
+    const status = Number(result?.status);
+    const statusText = String(result?.status || '').toLowerCase();
+    if (status === 200 || statusText === 'confirmed' || statusText === 'success') return result;
+    if (status >= 400 || ['failed', 'reverted', 'rejected'].includes(statusText)) throw new Error('The wallet batch failed or reverted. No NFT in the atomic batch was locked.');
+    await new Promise(resolve => setTimeout(resolve, 1_500));
+  }
+  throw new Error('The wallet batch is still pending. Check the wallet activity before retrying.');
+}
+function bridgeEvents(receipt) {
+  const events = [];
+  for (const log of receipt.logs || []) {
+    if (log.address?.toLowerCase() !== state.config.source.vault.toLowerCase()) continue;
+    try { const decoded = decodeEventLog({ abi: sourceAbi, data: log.data, topics: log.topics }); if (decoded.eventName === 'NFTBridged') events.push(decoded.args); } catch {}
+  }
+  return events;
+}
+async function requestRelay(item) {
+  if (!item.bridgeId) return;
+  try {
+    const response = await fetch(`${API_BASE}/api/relay`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ bridgeId: item.bridgeId }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Relayer request failed');
+    item.status = result.status === 'completed' ? 'minted' : 'relay';
+  } catch { item.status = 'relay'; }
+}
+
+async function runAtomicBatch(items, provider) {
+  items.forEach(item => { item.status = 'submitting'; }); renderBatchPanel();
+  state.batch.bundleId = null;
+  const chainId = `0x${state.config.source.chainId.toString(16)}`;
+  const bundle = await provider.request({ method: 'wallet_sendCalls', params: [{ version: '2.0.0', chainId, from: state.account, calls: buildBatchCalls(items) }] });
+  const bundleId = typeof bundle === 'string' ? bundle : bundle?.id;
+  if (!bundleId) throw new Error('Wallet did not return a batch identifier.');
+  state.batch.bundleId = bundleId;
+  let result;
+  try { result = await waitForWalletCalls(provider, bundleId); }
+  catch (error) {
+    if (/still pending/i.test(error.message)) items.forEach(item => { item.error = error.message; item.errorKind = 'pending'; item.status = 'error'; });
+    throw error;
+  }
+  const hashes = [...new Set((result.receipts || []).map(receipt => receipt.transactionHash || receipt.transaction?.hash).filter(Boolean))];
+  const client = createPublicClient({ transport: http(state.config.source.rpcUrl, { retryCount: 3 }) });
+  const events = [];
+  for (const hash of hashes) { const receipt = await client.getTransactionReceipt({ hash }); events.push(...bridgeEvents(receipt)); }
+  for (const item of items) {
+    const event = events.find(args => args.collection.toLowerCase() === item.collection.toLowerCase() && args.tokenId.toString() === item.tokenId.toString());
+    item.locked = true; item.status = 'relay'; item.sourceTxHash = hashes[0] || null; item.bridgeId = event?.id || null;
+  }
+  await Promise.all(items.map(requestRelay));
+}
+
+function unsupportedWalletBatch(error) {
+  const code = Number(error?.code);
+  const message = error?.shortMessage || error?.message || '';
+  return [-32601, 4200].includes(code) || /method.*not (?:found|supported)|wallet_sendCalls.*not supported/i.test(message);
+}
+
+async function runSequentialBatch(items) {
+  const wallet = sourceWalletClient();
+  const client = createPublicClient({ transport: http(state.config.source.rpcUrl, { retryCount: 3 }) });
+  const approved1155 = new Set(items.filter(item => item.approved && item.standard === 'ERC-1155').map(item => item.collection.toLowerCase()));
+  for (const item of items) {
+    try {
+      if (!item.approved) {
+        const collectionKey = item.collection.toLowerCase();
+        if (item.standard !== 'ERC-1155' || !approved1155.has(collectionKey)) {
+          item.status = 'approving'; renderBatchPanel();
+          const approval = approvalCall(item);
+          const approvalHash = await wallet.sendTransaction({ account: state.account, chain: wallet.chain, to: approval.to, data: approval.data });
+          const approvalReceipt = await client.waitForTransactionReceipt({ hash: approvalHash });
+          if (approvalReceipt.status !== 'success') throw new Error('NFT approval reverted.');
+          if (item.standard === 'ERC-1155') approved1155.add(collectionKey);
+        }
+        item.approved = true;
+        if (item.standard === 'ERC-1155') state.batch.items.filter(candidate => candidate.collection.toLowerCase() === collectionKey && candidate.standard === 'ERC-1155').forEach(candidate => { candidate.approved = true; });
+      }
+      item.status = 'locking'; renderBatchPanel();
+      const hash = await wallet.writeContract({ account: state.account, chain: wallet.chain, address: state.config.source.vault, abi: sourceAbi, functionName: 'bridge', args: [item.collection, item.tokenId] });
+      item.sourceTxHash = hash;
+      const receipt = await client.waitForTransactionReceipt({ hash, confirmations: Number(state.config.source.confirmations || 1) + 1 });
+      if (receipt.status !== 'success') throw new Error('NFT lock transaction reverted.');
+      const event = bridgeEvents(receipt).find(args => args.collection.toLowerCase() === item.collection.toLowerCase() && args.tokenId.toString() === item.tokenId.toString());
+      item.locked = true; item.bridgeId = event?.id || null; item.status = 'relay'; renderBatchPanel();
+      await requestRelay(item); renderBatchPanel();
+    } catch (error) {
+      item.error = error.shortMessage || error.message || 'Transaction failed.'; item.errorKind = 'transaction'; item.status = 'error'; renderBatchPanel();
+      break;
+    }
+  }
+}
+
+async function runBatch() {
+  if (state.batch.running || state.batch.preparing || !state.account) return;
+  state.batch.running = true; renderBatchPanel();
+  try {
+    await requireSafeRoute(); await switchChain(state.config.source);
+    await validateBatchItems(true);
+    if (state.batch.items.some(item => item.error)) throw new Error('Batch validation failed. Edit the selection before continuing.');
+    const items = pendingBatchItems(); if (!items.length) return;
+    const provider = activeProvider(); state.batch.walletBatch = await supportsAtomicWalletBatch(provider); renderBatchPanel();
+    if (state.batch.walletBatch) {
+      try { await runAtomicBatch(items, provider); }
+      catch (error) {
+        if (state.batch.bundleId || !unsupportedWalletBatch(error)) throw error;
+        state.batch.walletBatch = false;
+        items.forEach(item => { item.status = item.approved ? 'ready' : 'approval'; delete item.error; delete item.errorKind; });
+        renderBatchPanel();
+        await runSequentialBatch(items);
+      }
+    } else await runSequentialBatch(items);
+    const locked = state.batch.items.filter(item => item.locked).length;
+    if (locked) toast(`${locked} NFT${locked === 1 ? '' : 's'} locked with separate bridge records.`, 'success');
+    const failed = state.batch.items.find(item => item.error);
+    if (failed) toast(`Batch paused: ${failed.error}`, 'error');
+    await loadStatus(true);
+  } catch (error) {
+    const message = error.shortMessage || error.message || 'Batch bridge failed.';
+    if (!state.batch.items.some(item => item.errorKind === 'pending')) state.batch.items.filter(item => !item.locked && ['submitting', 'locking'].includes(item.status)).forEach(item => { item.status = 'error'; item.errorKind = 'transaction'; item.error = message; });
+    toast(message, 'error');
+  }
+  finally { state.batch.running = false; renderBatchPanel(); }
+}
+$('batch-action').addEventListener('click', runBatch);
 
 function updateTransactionAction() {
   const button = $('transaction-action'); if (!state.nft) { button.hidden = true; return; } button.hidden = false;
