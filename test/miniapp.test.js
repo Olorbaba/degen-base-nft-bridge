@@ -26,8 +26,10 @@ test('frontend publishes Mini App embeds and initializes the Farcaster wallet pr
   assert.match(html, /name="fc:frame"/);
   assert.match(html, /name="fc:miniapp"/);
   assert.match(html, /launch_miniapp/);
-  assert.match(html, /app\.js\?v=20260817\.1/);
-  assert.match(app, /vendor\/viem\.js\?v=20260817\.1/);
+  assert.match(html, /app\.js\?v=20260817\.2/);
+  assert.match(app, /vendor\/viem\.js\?v=20260817\.2/);
+  assert.match(app, /try { providers = injected\?\.providers; } catch/);
+  assert.match(app, /try \{ discoverWalletProviders\(\); \} catch/);
   assert.match(app, /miniAppSdk\.wallet\.getEthereumProvider/);
   assert.match(app, /miniAppSdk\.actions\.ready/);
 });
@@ -39,7 +41,7 @@ test('wallet chooser prioritizes mainstream wallets without blocking other provi
   assert.match(app, /metamask/);
   assert.match(app, /coinbase/);
   assert.match(app, /rabby/);
-  assert.match(app, /info\.uuid && item\.info\.uuid === info\.uuid/);
+  assert.match(app, /uuid && item\.info\.uuid === uuid/);
   assert.match(app, /other\.forEach\(entry => wrapper\.append\(createProviderButton\(entry\)\)\)/);
   assert.doesNotMatch(app, /blockedWallet|providerDenylist|denylistedProvider/i);
 });

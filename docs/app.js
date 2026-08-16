@@ -1,5 +1,5 @@
-import { createPublicClient, createWalletClient, custom, decodeEventLog, encodeFunctionData, formatEther, getAddress, http, isAddress, parseEther } from './vendor/viem.js?v=20260817.1';
-import { sdk as miniAppSdk } from './vendor/farcaster-miniapp.js?v=20260817.1';
+import { createPublicClient, createWalletClient, custom, decodeEventLog, encodeFunctionData, formatEther, getAddress, http, isAddress, parseEther } from './vendor/viem.js?v=20260817.2';
+import { sdk as miniAppSdk } from './vendor/farcaster-miniapp.js?v=20260817.2';
 
 const PUBLIC_PRODUCTION_API = 'https://degen-base-nft-bridge-production.up.railway.app';
 const API_BASE = window.BRIDGE_API_URL || (location.hostname.endsWith('github.io') ? PUBLIC_PRODUCTION_API : location.origin);
@@ -47,11 +47,11 @@ const explorer = (base, kind, value) => {
 };
 
 function providerLabel(provider, info = {}) {
-  if (info.name) return info.name;
-  if (provider?.isCoinbaseWallet) return 'Coinbase Wallet';
-  if (provider?.isRabby) return 'Rabby';
-  if (provider?.isBraveWallet) return 'Brave Wallet';
-  if (provider?.isMetaMask) return 'MetaMask';
+  try { if (info.name) return info.name; } catch {}
+  try { if (provider?.isCoinbaseWallet) return 'Coinbase Wallet'; } catch {}
+  try { if (provider?.isRabby) return 'Rabby'; } catch {}
+  try { if (provider?.isBraveWallet) return 'Brave Wallet'; } catch {}
+  try { if (provider?.isMetaMask) return 'MetaMask'; } catch {}
   return 'Browser wallet';
 }
 const preferredWalletMatchers = [
@@ -67,7 +67,10 @@ const preferredWalletMatchers = [
   /phantom|app\.phantom/
 ];
 function providerIdentity(entry) {
-  return `${entry?.info?.name || providerLabel(entry?.provider)} ${entry?.info?.rdns || ''}`.toLowerCase();
+  let name = ''; let rdns = '';
+  try { name = entry?.info?.name || ''; } catch {}
+  try { rdns = entry?.info?.rdns || ''; } catch {}
+  return `${name || providerLabel(entry?.provider)} ${rdns}`.toLowerCase();
 }
 function providerPriority(entry) {
   const identity = providerIdentity(entry);
@@ -76,24 +79,31 @@ function providerPriority(entry) {
   return preferredIndex === -1 ? null : preferredIndex + 1;
 }
 function registerProvider(provider, info = {}, preferred = false) {
-  if (!provider || state.providers.some(item => item.provider === provider || (info.uuid && item.info.uuid === info.uuid))) return;
-  const entry = { provider, info: { ...info, name: providerLabel(provider, info) } };
+  if (!provider) return;
+  let uuid = ''; try { uuid = info.uuid || ''; } catch {}
+  if (state.providers.some(item => { try { return item.provider === provider || (uuid && item.info.uuid === uuid); } catch { return item.provider === provider; } })) return;
+  const safeInfo = {};
+  for (const key of ['uuid', 'name', 'icon', 'rdns']) { try { if (info[key]) safeInfo[key] = info[key]; } catch {} }
+  safeInfo.name = providerLabel(provider, safeInfo);
+  const entry = { provider, info: safeInfo };
   if (preferred) state.providers.unshift(entry);
   else state.providers.push(entry);
 }
 function activeProvider() {
   if (state.provider) return state.provider;
   if (state.providers[0]) return state.providers[0].provider;
-  return window.ethereum || null;
+  try { return window.ethereum || null; } catch { return null; }
 }
 function discoverWalletProviders() {
-  const injected = window.ethereum;
-  if (Array.isArray(injected?.providers)) injected.providers.forEach(provider => registerProvider(provider));
-  else registerProvider(injected);
+  let injected = null; try { injected = window.ethereum; } catch {}
+  let providers = null;
+  try { providers = injected?.providers; } catch { /* Some wallet proxies throw on optional properties. */ }
+  if (Array.isArray(providers)) providers.forEach(provider => { try { registerProvider(provider); } catch {} });
+  else { try { registerProvider(injected); } catch {} }
   window.dispatchEvent(new Event('eip6963:requestProvider'));
 }
-window.addEventListener('eip6963:announceProvider', event => registerProvider(event.detail?.provider, event.detail?.info));
-discoverWalletProviders();
+window.addEventListener('eip6963:announceProvider', event => { try { registerProvider(event.detail?.provider, event.detail?.info); } catch {} });
+try { discoverWalletProviders(); } catch {}
 
 async function initializeMiniApp() {
   try {
@@ -306,7 +316,8 @@ function resetWalletState(message = 'Wallet disconnected from this app.') {
 function renderProviderList() {
   const list = $('wallet-provider-list');
   list.innerHTML = '';
-  const providers = state.providers.length ? state.providers : (window.ethereum ? [{ provider: window.ethereum, info: { name: providerLabel(window.ethereum) } }] : []);
+  const fallbackProvider = activeProvider();
+  const providers = state.providers.length ? state.providers : (fallbackProvider ? [{ provider: fallbackProvider, info: { name: providerLabel(fallbackProvider) } }] : []);
   const ranked = providers.map((entry, index) => ({ entry, index, priority: providerPriority(entry) }));
   const recommended = ranked
     .filter(item => item.priority !== null)
